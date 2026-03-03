@@ -131,11 +131,11 @@ const LandingPage = () => {
             <Link to="/login">
               <Button variant="ghost" size="sm">Entrar</Button>
             </Link>
-            <Link to="/login">
+            <a href="#pricing">
               <Button size="sm" className="gap-1.5">
                 Ver Planos <ArrowRight className="h-4 w-4" />
               </Button>
-            </Link>
+            </a>
           </div>
         </div>
       </nav>
