@@ -1,4 +1,5 @@
 import { useState, useCallback } from "react";
+import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Link } from "react-router-dom";
@@ -115,6 +116,7 @@ const screenshots = [
 ];
 
 const LandingPage = () => {
+  const { session } = useAuth();
   const [activeScreenshot, setActiveScreenshot] = useState(0);
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
 
@@ -162,8 +164,8 @@ const LandingPage = () => {
             <a href="#testimonials" className="text-sm text-muted-foreground transition-colors hover:text-foreground">Depoimentos</a>
           </div>
           <div className="flex items-center gap-3">
-            <Link to="/login">
-              <Button variant="ghost" size="sm">Entrar</Button>
+            <Link to={session ? "/dashboard" : "/login"}>
+              <Button variant="ghost" size="sm">{session ? "Acessar Painel" : "Entrar"}</Button>
             </Link>
             <a href="#pricing">
               <Button size="sm" className="gap-1.5">
