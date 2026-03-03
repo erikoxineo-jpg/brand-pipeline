@@ -87,23 +87,23 @@ const features = [
 const testimonials = [
   {
     name: "Marina Costa",
-    role: "Gerente de Marketing — Clínica Estética",
+    role: "Gerente de Marketing — Glow Cosmetics",
     content:
-      "Reativamos 23% da base inativa em apenas 2 semanas. O ROI foi absurdo comparado com qualquer outra ferramenta que já usamos.",
+      "Reativamos 23% da base inativa em apenas 2 semanas. Clientes voltaram comprando kits de skincare pelo WhatsApp. ROI absurdo!",
     stars: 5,
   },
   {
     name: "Carlos Mendes",
-    role: "Dono — Rede de Pet Shops",
+    role: "Diretor — Beleza Pura Cosméticos",
     content:
       "O pipeline Kanban é genial. Consigo ver exatamente em que etapa cada cliente está e meus operadores sabem exatamente o que fazer.",
     stars: 5,
   },
   {
     name: "Juliana Alves",
-    role: "Head de Vendas — E-commerce de Moda",
+    role: "Head de Vendas — Essence Beauty",
     content:
-      "De 4.000 clientes inativos, recuperamos 340 em 30 dias. O dashboard mostra tudo que preciso para tomar decisões rápidas.",
+      "De 4.000 clientes inativos, recuperamos 340 em 30 dias. Vendas de perfumes e maquiagens dispararam com as campanhas de reativação.",
     stars: 5,
   },
 ];
@@ -407,21 +407,21 @@ const LandingPage = () => {
             {[
               {
                 img: whatsappClinica,
-                brand: "Clínica Bella",
-                segment: "Clínica de Estética",
-                result: "23% de reativação — clientes agendando direto pelo WhatsApp",
+                brand: "Glow Cosmetics",
+                segment: "Skincare & Cuidados com a Pele",
+                result: "23% de reativação — clientes comprando kits de skincare pelo WhatsApp",
               },
               {
                 img: whatsappPetshop,
-                brand: "PetMax",
-                segment: "Rede de Pet Shops",
-                result: "340 clientes recuperados em 30 dias com ofertas personalizadas",
+                brand: "Beleza Pura",
+                segment: "Loja de Maquiagens",
+                result: "340 clientes recuperados em 30 dias com ofertas de nova coleção",
               },
               {
                 img: whatsappModa,
-                brand: "ModaStyle",
-                segment: "E-commerce de Moda",
-                result: "R$47.000 em vendas recuperadas no primeiro mês",
+                brand: "Essence Beauty",
+                segment: "Perfumaria & Cosméticos",
+                result: "R$47.000 em vendas de perfumes recuperadas no primeiro mês",
               },
             ].map((chat) => (
               <motion.div key={chat.brand} variants={fadeUp} className="text-center">
@@ -471,14 +471,14 @@ const LandingPage = () => {
                     plan: "Plano 1.000 contatos",
                     invest: "R$ 699 + R$ 99/mês",
                     reactivated: "340 clientes",
-                    example: "Uma clínica de estética com ticket médio de R$ 150 pode gerar R$ 51.000 em agendamentos reativados.",
+                    example: "Uma loja de skincare com ticket médio de R$ 150 pode gerar R$ 51.000 em vendas de cosméticos reativadas.",
                     roi: "65x o investimento",
                   },
                   {
                     plan: "Plano 5.000 contatos",
                     invest: "R$ 1.299 + R$ 99/mês",
                     reactivated: "1.700 clientes",
-                    example: "Um pet shop com ticket médio de R$ 80 pode recuperar R$ 136.000 em vendas recorrentes.",
+                    example: "Uma marca de maquiagens com ticket médio de R$ 80 pode recuperar R$ 136.000 em vendas recorrentes.",
                     roi: "97x o investimento",
                     highlight: true,
                   },
@@ -486,7 +486,7 @@ const LandingPage = () => {
                     plan: "Plano 10.000 contatos",
                     invest: "R$ 1.999 + R$ 99/mês",
                     reactivated: "3.400 clientes",
-                    example: "Um e-commerce de moda com ticket médio de R$ 200 pode faturar R$ 680.000 em vendas reativadas.",
+                    example: "Uma perfumaria com ticket médio de R$ 200 pode faturar R$ 680.000 em vendas de fragrâncias reativadas.",
                     roi: "324x o investimento",
                   },
                 ].map((item) => (
