@@ -29,7 +29,9 @@ import heroBg from "@/assets/hero-bg.jpg";
 import screenshotDashboard from "@/assets/screenshot-dashboard.png";
 import screenshotLeads from "@/assets/screenshot-leads.png";
 import screenshotPipeline from "@/assets/screenshot-pipeline.png";
+import whatsappClinica from "@/assets/whatsapp-chat-clinica.png";
 import whatsappModa from "@/assets/whatsapp-chat-moda.png";
+import whatsappPetshop from "@/assets/whatsapp-chat-petshop.png";
 
 const fadeUp = {
   hidden: { opacity: 0, y: 30 },
@@ -460,7 +462,7 @@ const LandingPage = () => {
           >
             {[
               {
-                img: whatsappModa,
+                img: whatsappClinica,
                 brand: "Glow Cosmetics",
                 segment: "Skincare & Cuidados com a Pele",
                 result: "23% de reativação — clientes comprando kits de skincare pelo WhatsApp",
@@ -472,7 +474,7 @@ const LandingPage = () => {
                 result: "340 clientes recuperados em 30 dias com ofertas de nova coleção",
               },
               {
-                img: whatsappModa,
+                img: whatsappPetshop,
                 brand: "Essence Beauty",
                 segment: "Perfumaria & Cosméticos",
                 result: "R$47.000 em vendas de perfumes recuperadas no primeiro mês",
