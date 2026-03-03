@@ -10,6 +10,8 @@ import {
   MessageSquare,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/contexts/AuthContext";
+import { Badge } from "@/components/ui/badge";
 
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
@@ -21,9 +23,16 @@ const navigation = [
   { name: "Configurações", href: "/settings", icon: Settings },
 ];
 
+const roleLabels: Record<string, string> = {
+  admin: "Admin",
+  gestor: "Gestor",
+  operador: "Operador",
+};
+
 const AppSidebar = () => {
   const location = useLocation();
   const navigate = useNavigate();
+  const { profile, currentBrand, currentRole, signOut } = useAuth();
 
   return (
     <aside className="flex h-screen w-64 flex-col border-r border-border bg-card">
@@ -61,14 +70,25 @@ const AppSidebar = () => {
       <div className="border-t border-border p-3">
         <div className="flex items-center gap-3 rounded-lg px-3 py-2">
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
-            A
+            {profile?.display_name?.[0]?.toUpperCase() || "U"}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="truncate text-sm font-medium text-foreground">Admin</p>
-            <p className="truncate text-xs text-muted-foreground">Marca Demo</p>
+            <p className="truncate text-sm font-medium text-foreground">
+              {profile?.display_name || "Usuário"}
+            </p>
+            <div className="flex items-center gap-1.5">
+              <span className="truncate text-xs text-muted-foreground">
+                {currentBrand?.name || "Sem marca"}
+              </span>
+              {currentRole && (
+                <Badge variant="secondary" className="text-[10px] px-1 py-0">
+                  {roleLabels[currentRole] || currentRole}
+                </Badge>
+              )}
+            </div>
           </div>
           <button
-            onClick={() => navigate("/login")}
+            onClick={signOut}
             className="text-muted-foreground hover:text-foreground"
           >
             <LogOut className="h-4 w-4" />
