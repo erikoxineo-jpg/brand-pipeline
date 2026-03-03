@@ -2,10 +2,11 @@ import { useState, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { useIsMobile } from "@/hooks/use-mobile";
 import {
   MessageSquare,
   Users,
@@ -21,13 +22,13 @@ import {
   Target,
   DollarSign,
   Calculator,
+  Menu,
+  X,
 } from "lucide-react";
 import heroBg from "@/assets/hero-bg.jpg";
 import screenshotDashboard from "@/assets/screenshot-dashboard.png";
 import screenshotLeads from "@/assets/screenshot-leads.png";
 import screenshotPipeline from "@/assets/screenshot-pipeline.png";
-import whatsappClinica from "@/assets/whatsapp-chat-clinica.png";
-import whatsappPetshop from "@/assets/whatsapp-chat-petshop.png";
 import whatsappModa from "@/assets/whatsapp-chat-moda.png";
 
 const fadeUp = {
@@ -117,7 +118,10 @@ const screenshots = [
 
 const LandingPage = () => {
   const { session } = useAuth();
+  const isMobile = useIsMobile();
+  const navigate = useNavigate();
   const [activeScreenshot, setActiveScreenshot] = useState(0);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
 
   const handleCheckout = useCallback(async (planId: string) => {
@@ -163,17 +167,65 @@ const LandingPage = () => {
             <a href="#pricing" className="text-sm text-muted-foreground transition-colors hover:text-foreground">Planos</a>
             <a href="#testimonials" className="text-sm text-muted-foreground transition-colors hover:text-foreground">Depoimentos</a>
           </div>
-          <div className="flex items-center gap-3">
-            <Link to={session ? "/dashboard" : "/login"}>
-              <Button variant="ghost" size="sm">{session ? "Acessar Painel" : "Entrar"}</Button>
-            </Link>
+          <div className="hidden items-center gap-3 md:flex">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                if (session) {
+                  navigate(isMobile ? "/mobile-warning" : "/dashboard");
+                } else {
+                  navigate("/login");
+                }
+              }}
+            >
+              {session ? "Acessar Painel" : "Entrar"}
+            </Button>
             <a href="#pricing">
               <Button size="sm" className="gap-1.5">
                 Ver Planos <ArrowRight className="h-4 w-4" />
               </Button>
             </a>
           </div>
+          {/* Mobile hamburger */}
+          <button
+            className="md:hidden p-2 text-foreground"
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+          >
+            {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+          </button>
         </div>
+        {/* Mobile menu */}
+        {mobileMenuOpen && (
+          <div className="border-t border-border/50 bg-background px-4 py-4 md:hidden space-y-3">
+            <a href="#features" onClick={() => setMobileMenuOpen(false)} className="block text-sm text-muted-foreground py-2 hover:text-foreground">Funcionalidades</a>
+            <a href="#screenshots" onClick={() => setMobileMenuOpen(false)} className="block text-sm text-muted-foreground py-2 hover:text-foreground">Plataforma</a>
+            <a href="#pricing" onClick={() => setMobileMenuOpen(false)} className="block text-sm text-muted-foreground py-2 hover:text-foreground">Planos</a>
+            <a href="#testimonials" onClick={() => setMobileMenuOpen(false)} className="block text-sm text-muted-foreground py-2 hover:text-foreground">Depoimentos</a>
+            <div className="border-t border-border/50 pt-3 flex flex-col gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full"
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  if (session) {
+                    navigate("/mobile-warning");
+                  } else {
+                    navigate("/login");
+                  }
+                }}
+              >
+                {session ? "Acessar Painel" : "Entrar"}
+              </Button>
+              <a href="#pricing" onClick={() => setMobileMenuOpen(false)}>
+                <Button size="sm" className="w-full gap-1.5">
+                  Ver Planos <ArrowRight className="h-4 w-4" />
+                </Button>
+              </a>
+            </div>
+          </div>
+        )}
       </nav>
 
       {/* Hero */}
@@ -408,13 +460,13 @@ const LandingPage = () => {
           >
             {[
               {
-                img: whatsappClinica,
+                img: whatsappModa,
                 brand: "Glow Cosmetics",
                 segment: "Skincare & Cuidados com a Pele",
                 result: "23% de reativação — clientes comprando kits de skincare pelo WhatsApp",
               },
               {
-                img: whatsappPetshop,
+                img: whatsappModa,
                 brand: "Beleza Pura",
                 segment: "Loja de Maquiagens",
                 result: "340 clientes recuperados em 30 dias com ofertas de nova coleção",

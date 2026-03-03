@@ -16,6 +16,7 @@ import Dispatches from "./pages/Dispatches";
 import SettingsPage from "./pages/SettingsPage";
 import NotFound from "./pages/NotFound";
 import LandingPage from "./pages/LandingPage";
+import MobileWarning from "./pages/MobileWarning";
 
 const queryClient = new QueryClient();
 
@@ -28,6 +29,7 @@ const App = () => (
         <BrowserRouter>
           <Routes>
             <Route path="/" element={<LandingPage />} />
+            <Route path="/mobile-warning" element={<MobileWarning />} />
             <Route path="/login" element={<Login />} />
             <Route
               element={
