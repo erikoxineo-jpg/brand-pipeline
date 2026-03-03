@@ -1,4 +1,6 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -109,6 +111,33 @@ const screenshots = [
 
 const LandingPage = () => {
   const [activeScreenshot, setActiveScreenshot] = useState(0);
+  const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
+
+  const handleCheckout = useCallback(async (planId: string) => {
+    setCheckoutLoading(planId);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        // Redirect to login with return info
+        window.location.href = `/login?plan=${planId}`;
+        return;
+      }
+
+      const { data, error } = await supabase.functions.invoke("create-checkout", {
+        body: { planId },
+      });
+
+      if (error) throw error;
+      if (data?.url) {
+        window.open(data.url, "_blank");
+      }
+    } catch (err: any) {
+      toast.error("Erro ao iniciar pagamento. Tente novamente.");
+      console.error(err);
+    } finally {
+      setCheckoutLoading(null);
+    }
+  }, []);
 
   return (
     <div className="min-h-screen bg-background">
@@ -417,10 +446,10 @@ const LandingPage = () => {
             className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-4"
           >
             {[
-              { contacts: "1.000", setup: "R$699", monthly: "R$99", highlight: false },
-              { contacts: "5.000", setup: "R$1.299", monthly: "R$99", highlight: true },
-              { contacts: "10.000", setup: "R$1.999", monthly: "R$99", highlight: false },
-              { contacts: "25.000", setup: "R$2.499", monthly: "R$99", highlight: false },
+              { contacts: "1.000", planId: "1000", setup: "R$699", monthly: "R$99", highlight: false },
+              { contacts: "5.000", planId: "5000", setup: "R$1.299", monthly: "R$99", highlight: true },
+              { contacts: "10.000", planId: "10000", setup: "R$1.999", monthly: "R$99", highlight: false },
+              { contacts: "25.000", planId: "25000", setup: "R$2.499", monthly: "R$99", highlight: false },
             ].map((plan) => (
               <motion.div key={plan.contacts} variants={fadeUp}>
                 <Card className={`relative h-full border-border/50 transition-shadow hover:shadow-lg ${plan.highlight ? "border-primary shadow-lg ring-2 ring-primary/20" : ""}`}>
@@ -439,11 +468,14 @@ const LandingPage = () => {
                       <span className="text-sm text-muted-foreground">/mês</span>
                     </div>
                     <p className="text-xs text-muted-foreground">+ Setup único de {plan.setup}</p>
-                    <Link to="/login" className="mt-6 block">
-                      <Button className="w-full" variant={plan.highlight ? "default" : "outline"}>
-                        Começar Agora
-                      </Button>
-                    </Link>
+                    <Button
+                      className="mt-6 w-full"
+                      variant={plan.highlight ? "default" : "outline"}
+                      onClick={() => handleCheckout(plan.planId)}
+                      disabled={checkoutLoading === plan.planId}
+                    >
+                      {checkoutLoading === plan.planId ? "Aguarde..." : "Começar Agora"}
+                    </Button>
                     <ul className="mt-4 space-y-2 text-left text-sm text-muted-foreground">
                       <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-primary" /> Disparos ilimitados</li>
                       <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-primary" /> Dashboard completo</li>
