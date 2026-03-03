@@ -204,11 +204,11 @@ const LandingPage = () => {
               em tempo real. Transforme clientes esquecidos em receita recorrente.
             </motion.p>
             <motion.div variants={fadeUp} className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
-              <Link to="/login">
+              <a href="#pricing">
                 <Button size="lg" className="h-12 gap-2 px-8 text-base">
                   Ver Planos — A partir de R$99/mês <ArrowRight className="h-5 w-5" />
                 </Button>
-              </Link>
+              </a>
               <a href="#screenshots">
                 <Button variant="outline" size="lg" className="h-12 px-8 text-base">
                   Ver Plataforma
