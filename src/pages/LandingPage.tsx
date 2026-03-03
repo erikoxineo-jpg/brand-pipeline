@@ -18,11 +18,16 @@ import {
   TrendingUp,
   Clock,
   Target,
+  DollarSign,
+  Calculator,
 } from "lucide-react";
 import heroBg from "@/assets/hero-bg.jpg";
 import screenshotDashboard from "@/assets/screenshot-dashboard.png";
 import screenshotLeads from "@/assets/screenshot-leads.png";
 import screenshotPipeline from "@/assets/screenshot-pipeline.png";
+import whatsappClinica from "@/assets/whatsapp-chat-clinica.png";
+import whatsappPetshop from "@/assets/whatsapp-chat-petshop.png";
+import whatsappModa from "@/assets/whatsapp-chat-moda.png";
 
 const fadeUp = {
   hidden: { opacity: 0, y: 30 },
@@ -375,7 +380,144 @@ const LandingPage = () => {
         </div>
       </section>
 
-      {/* Testimonials */}
+      {/* WhatsApp Conversations Showcase */}
+      <section className="bg-muted/30 py-20 sm:py-28">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <motion.div
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true }}
+            variants={stagger}
+            className="mx-auto max-w-2xl text-center"
+          >
+            <motion.h2 variants={fadeUp} className="text-3xl font-bold text-foreground sm:text-4xl">
+              Veja como suas marcas conversam no WhatsApp
+            </motion.h2>
+            <motion.p variants={fadeUp} className="mt-4 text-lg text-muted-foreground">
+              Mensagens personalizadas que geram respostas reais. Cada segmento com sua abordagem.
+            </motion.p>
+          </motion.div>
+          <motion.div
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true }}
+            variants={stagger}
+            className="mt-16 grid gap-8 md:grid-cols-3"
+          >
+            {[
+              {
+                img: whatsappClinica,
+                brand: "Clínica Bella",
+                segment: "Clínica de Estética",
+                result: "23% de reativação — clientes agendando direto pelo WhatsApp",
+              },
+              {
+                img: whatsappPetshop,
+                brand: "PetMax",
+                segment: "Rede de Pet Shops",
+                result: "340 clientes recuperados em 30 dias com ofertas personalizadas",
+              },
+              {
+                img: whatsappModa,
+                brand: "ModaStyle",
+                segment: "E-commerce de Moda",
+                result: "R$47.000 em vendas recuperadas no primeiro mês",
+              },
+            ].map((chat) => (
+              <motion.div key={chat.brand} variants={fadeUp} className="text-center">
+                <div className="mx-auto mb-6 w-64 overflow-hidden rounded-[2rem] border-4 border-border shadow-2xl">
+                  <img src={chat.img} alt={`Conversa WhatsApp - ${chat.brand}`} className="w-full" loading="lazy" />
+                </div>
+                <div className="rounded-xl bg-card p-4 border border-border/50">
+                  <p className="text-lg font-bold text-foreground">{chat.brand}</p>
+                  <p className="text-sm text-muted-foreground">{chat.segment}</p>
+                  <div className="mt-3 flex items-center justify-center gap-1.5 text-sm font-medium text-primary">
+                    <CheckCircle2 className="h-4 w-4" />
+                    {chat.result}
+                  </div>
+                </div>
+              </motion.div>
+            ))}
+          </motion.div>
+        </div>
+      </section>
+
+      {/* ROI Calculator Section */}
+      <section className="py-20 sm:py-28">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <motion.div
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true }}
+            variants={stagger}
+          >
+            <div className="grid items-center gap-12 lg:grid-cols-2">
+              <motion.div variants={fadeUp}>
+                <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-4 py-1.5 text-sm text-primary">
+                  <Calculator className="h-4 w-4" />
+                  ROI Médio de 34%
+                </div>
+                <h2 className="text-3xl font-bold text-foreground sm:text-4xl">
+                  Seu investimento se paga em <span className="text-primary">semanas</span>
+                </h2>
+                <p className="mt-4 text-lg text-muted-foreground">
+                  Com uma taxa média de reativação de 34%, o retorno sobre o investimento é rápido e previsível. Veja exemplos reais de quanto cada plano pode gerar:
+                </p>
+              </motion.div>
+
+              <motion.div variants={fadeUp} className="space-y-4">
+                {[
+                  {
+                    plan: "Plano 1.000 contatos",
+                    invest: "R$ 699 + R$ 99/mês",
+                    reactivated: "340 clientes",
+                    example: "Uma clínica de estética com ticket médio de R$ 150 pode gerar R$ 51.000 em agendamentos reativados.",
+                    roi: "65x o investimento",
+                  },
+                  {
+                    plan: "Plano 5.000 contatos",
+                    invest: "R$ 1.299 + R$ 99/mês",
+                    reactivated: "1.700 clientes",
+                    example: "Um pet shop com ticket médio de R$ 80 pode recuperar R$ 136.000 em vendas recorrentes.",
+                    roi: "97x o investimento",
+                    highlight: true,
+                  },
+                  {
+                    plan: "Plano 10.000 contatos",
+                    invest: "R$ 1.999 + R$ 99/mês",
+                    reactivated: "3.400 clientes",
+                    example: "Um e-commerce de moda com ticket médio de R$ 200 pode faturar R$ 680.000 em vendas reativadas.",
+                    roi: "324x o investimento",
+                  },
+                ].map((item) => (
+                  <Card key={item.plan} className={`border-border/50 transition-shadow hover:shadow-lg ${item.highlight ? "border-primary ring-2 ring-primary/20" : ""}`}>
+                    <CardContent className="p-5">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1">
+                          <p className="font-semibold text-foreground">{item.plan}</p>
+                          <p className="text-xs text-muted-foreground">Investimento: {item.invest}</p>
+                          <p className="mt-2 text-sm text-muted-foreground">{item.example}</p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <div className="flex items-center gap-1 text-primary">
+                            <DollarSign className="h-4 w-4" />
+                            <span className="text-sm font-bold">{item.roi}</span>
+                          </div>
+                          <p className="mt-1 text-xs text-muted-foreground">{item.reactivated} reativados</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+                <p className="text-center text-xs text-muted-foreground">
+                  * Baseado na taxa média de reativação de 34% e tickets médios por segmento. Resultados podem variar.
+                </p>
+              </motion.div>
+            </div>
+          </motion.div>
+        </div>
+      </section>
+
       <section id="testimonials" className="bg-muted/30 py-20 sm:py-28">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <motion.div
