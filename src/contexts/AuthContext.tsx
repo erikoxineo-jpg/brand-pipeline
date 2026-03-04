@@ -74,14 +74,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const defaultName =
         profileRes.data?.display_name || "Meu primeiro workspace";
 
-      const createdWorkspace = await supabase
-        .from("workspaces")
-        .insert({ name: defaultName })
-        .select("id")
-        .single();
+      const { error: rpcError } = await supabase
+        .rpc("create_my_workspace", { ws_name: defaultName });
 
-      if (createdWorkspace.error) {
-        // If workspace creation fails, we still keep the user logged in but without workspace context.
+      if (rpcError) {
         setMemberships([]);
         setWorkspaces([]);
         setCurrentWorkspaceId(null);
