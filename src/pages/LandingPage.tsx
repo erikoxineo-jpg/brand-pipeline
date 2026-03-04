@@ -38,9 +38,6 @@ import heroBg from "@/assets/hero-bg.jpg";
 import screenshotDashboard from "@/assets/screenshot-dashboard.png";
 import screenshotLeads from "@/assets/screenshot-leads.png";
 import screenshotPipeline from "@/assets/screenshot-pipeline.png";
-import whatsappClinica from "@/assets/whatsapp-chat-clinica.png";
-import whatsappModa from "@/assets/whatsapp-chat-moda.png";
-import whatsappPetshop from "@/assets/whatsapp-chat-petshop.png";
 
 const fadeUp = {
   hidden: { opacity: 0, y: 30 },
@@ -466,10 +463,10 @@ const LandingPage = () => {
             className="mx-auto max-w-2xl text-center"
           >
             <motion.h2 variants={fadeUp} className="text-3xl font-bold text-foreground sm:text-4xl">
-              Veja como suas marcas conversam no WhatsApp
+              Resultados reais em diferentes segmentos
             </motion.h2>
             <motion.p variants={fadeUp} className="mt-4 text-lg text-muted-foreground">
-              Mensagens personalizadas que geram respostas reais. Cada segmento com sua abordagem.
+              Veja como negócios diversos reconquistam clientes com o ReConnect.
             </motion.p>
           </motion.div>
           <motion.div
@@ -477,42 +474,142 @@ const LandingPage = () => {
             whileInView="visible"
             viewport={{ once: true }}
             variants={stagger}
-            className="mt-16 grid gap-8 md:grid-cols-3"
+            className="mt-16 grid gap-6 md:grid-cols-3"
           >
             {[
               {
-                img: whatsappClinica,
                 brand: "Clínica Vitale",
-                segment: "Clínica de Estética & Saúde",
-                result: "23% de reativação — pacientes agendando consultas pelo WhatsApp",
+                segment: "Estética & Saúde",
+                metric: "23%",
+                metricLabel: "de reativação",
+                logo: "💆‍♀️",
+                logoColor: "bg-sky-100 dark:bg-sky-900/30",
+                messages: [
+                  { from: "business", text: "Oi Ana! Sentimos sua falta na Clínica Vitale 💆‍♀️ Temos 20% OFF em limpeza de pele esta semana. Quer agendar?" },
+                  { from: "client", text: "Oi! Que legal, faz tempo mesmo. Quero sim!" },
+                  { from: "business", text: "Perfeito! Reservei quinta às 15h pra você. Te envio a confirmação por aqui 😊" },
+                ],
               },
               {
-                img: whatsappModa,
                 brand: "Boutique Essenza",
                 segment: "Moda Feminina",
-                result: "340 clientes recuperados em 30 dias com ofertas de nova coleção",
+                metric: "340",
+                metricLabel: "clientes em 30 dias",
+                logo: "👗",
+                logoColor: "bg-pink-100 dark:bg-pink-900/30",
+                messages: [
+                  { from: "business", text: "Oi Fernanda! A nova coleção de inverno chegou na Essenza 🧥 Como cliente especial, você tem acesso antecipado + frete grátis!" },
+                  { from: "client", text: "Nossa, que chique! Tem casacos novos?" },
+                  { from: "business", text: "Tem sim! Acabei de separar 3 opções no seu estilo. Mando as fotos?" },
+                  { from: "client", text: "Manda!! Quero ver todos 😍" },
+                ],
               },
               {
-                img: whatsappPetshop,
                 brand: "PetVida",
                 segment: "Pet Shop & Veterinária",
-                result: "R$47.000 em vendas recuperadas no primeiro mês com banho, tosa e rações",
+                metric: "R$18k",
+                metricLabel: "recuperados no 1º mês",
+                logo: "🐾",
+                logoColor: "bg-amber-100 dark:bg-amber-900/30",
+                messages: [
+                  { from: "business", text: "Oi Carlos! O Rex está com a vacina V10 atrasada 🐕 Aqui na PetVida temos um combo: vacina + banho com 25% OFF!" },
+                  { from: "client", text: "Eita, nem lembrava! Quanto fica?" },
+                  { from: "business", text: "O combo sai R$89,90 em vez de R$120. Posso agendar pra sábado de manhã?" },
+                  { from: "client", text: "Fecha! Sábado às 10h tá bom?" },
+                ],
               },
             ].map((chat) => (
-              <motion.div key={chat.brand} variants={fadeUp} className="text-center">
-                <div className="mx-auto mb-6 w-64 overflow-hidden rounded-[2rem] border-4 border-border shadow-2xl">
-                  <img src={chat.img} alt={`Conversa WhatsApp - ${chat.brand}`} className="w-full" loading="lazy" />
-                </div>
-                <div className="rounded-xl bg-card p-4 border border-border/50">
-                  <p className="text-lg font-bold text-foreground">{chat.brand}</p>
-                  <p className="text-sm text-muted-foreground">{chat.segment}</p>
-                  <div className="mt-3 flex items-center justify-center gap-1.5 text-sm font-medium text-primary">
-                    <CheckCircle2 className="h-4 w-4" />
-                    {chat.result}
+              <motion.div key={chat.brand} variants={fadeUp}>
+                <Card className="flex h-full flex-col overflow-hidden border-border/50">
+                  {/* Header */}
+                  <div className="flex items-center gap-3 border-b border-border/50 bg-card px-4 py-3">
+                    <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${chat.logoColor} text-lg`}>
+                      {chat.logo}
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">{chat.brand}</p>
+                      <p className="text-xs text-muted-foreground">{chat.segment}</p>
+                    </div>
                   </div>
-                </div>
+                  {/* Chat bubbles */}
+                  <div className="flex flex-1 flex-col gap-2.5 bg-[#efeae2] dark:bg-[#0b141a] p-4">
+                    {chat.messages.map((msg, i) => (
+                      <div
+                        key={i}
+                        className={`max-w-[85%] rounded-lg px-3 py-2 text-[13px] leading-relaxed shadow-sm ${
+                          msg.from === "business"
+                            ? "self-start rounded-tl-none bg-white dark:bg-[#202c33] text-foreground"
+                            : "self-end rounded-tr-none bg-[#d9fdd3] dark:bg-[#005c4b] text-foreground"
+                        }`}
+                      >
+                        {msg.text}
+                      </div>
+                    ))}
+                  </div>
+                  {/* Result banner — suave */}
+                  <div className="flex items-center justify-center gap-2 border-t border-border/50 bg-primary/10 px-5 py-2.5">
+                    <TrendingUp className="h-3.5 w-3.5 text-primary" />
+                    <span className="text-base font-bold text-primary">{chat.metric}</span>
+                    <span className="text-xs text-muted-foreground">{chat.metricLabel}</span>
+                  </div>
+                </Card>
               </motion.div>
             ))}
+          </motion.div>
+        </div>
+      </section>
+
+      {/* CAC Section — Video Background */}
+      <section className="relative overflow-hidden py-28 sm:py-36">
+        {/* Video background */}
+        <video
+          autoPlay
+          muted
+          loop
+          playsInline
+          className="absolute inset-0 h-full w-full object-cover"
+          poster=""
+        >
+          <source src="/cac-bg.mp4" type="video/mp4" />
+        </video>
+        {/* Dark overlay */}
+        <div className="absolute inset-0 bg-black/75" />
+        <div className="relative mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
+          <motion.div
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true }}
+            variants={stagger}
+            className="text-center"
+          >
+            <motion.p variants={fadeUp} className="mb-4 text-sm font-medium uppercase tracking-widest text-primary-foreground/60">
+              Você sabia?
+            </motion.p>
+            <motion.h2
+              variants={fadeUp}
+              className="text-3xl font-extrabold leading-tight text-white sm:text-4xl lg:text-5xl"
+            >
+              Reativar clientes da sua base é{" "}
+              <span className="bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
+                até 7x mais barato
+              </span>{" "}
+              que adquirir um novo
+            </motion.h2>
+            <motion.p variants={fadeUp} className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-white/70">
+              Enquanto o CAC (Custo de Aquisição de Cliente) só aumenta, sua base de inativos é uma mina de ouro inexplorada. Com o ReConnect, você transforma clientes esquecidos em receita — sem gastar com anúncios.
+            </motion.p>
+            <motion.div variants={fadeUp} className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
+              <Link to="/login">
+                <Button size="lg" className="h-12 gap-2 px-8 text-base">
+                  Começar Agora <ArrowRight className="h-5 w-5" />
+                </Button>
+              </Link>
+              <a href="#pricing">
+                <Button size="lg" variant="secondary" className="h-12 px-8 text-base">
+                  Ver Planos
+                </Button>
+              </a>
+            </motion.div>
           </motion.div>
         </div>
       </section>
