@@ -1,6 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Users, MessageSquare, TrendingUp, ShoppingCart, ArrowUpRight, ArrowDownRight } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from "recharts";
+import { useAuth } from "@/contexts/AuthContext";
 
 const kpis = [
   { title: "Leads Ativos", value: "4.328", change: "+12%", up: true, icon: Users },
@@ -51,11 +52,28 @@ const weeklyData = [
 ];
 
 const Dashboard = () => {
+  const { currentWorkspace } = useAuth();
+
+  if (!currentWorkspace) {
+    return (
+      <div className="flex h-full items-center justify-center p-6">
+        <div className="text-center space-y-2">
+          <h1 className="text-xl font-semibold text-foreground">Nenhum workspace disponível</h1>
+          <p className="text-sm text-muted-foreground">
+            Sua conta ainda não possui um workspace ativo. Faça login novamente ou entre em contato com o suporte.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 space-y-6">
       <div>
         <h1 className="text-2xl font-semibold text-foreground">Dashboard</h1>
-        <p className="text-sm text-muted-foreground">Visão geral da marca Demo</p>
+        <p className="text-sm text-muted-foreground">
+          Visão geral de {currentWorkspace.name}
+        </p>
       </div>
 
       {/* KPI Cards */}

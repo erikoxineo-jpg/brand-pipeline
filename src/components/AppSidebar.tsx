@@ -32,7 +32,7 @@ const roleLabels: Record<string, string> = {
 const AppSidebar = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { profile, currentBrand, currentRole, signOut } = useAuth();
+  const { profile, currentWorkspace, currentWorkspaceRole, signOut } = useAuth();
 
   return (
     <aside className="flex h-screen w-64 flex-col border-r border-border bg-card">
@@ -78,11 +78,11 @@ const AppSidebar = () => {
             </p>
             <div className="flex items-center gap-1.5">
               <span className="truncate text-xs text-muted-foreground">
-                {currentBrand?.name || "Sem marca"}
+                {currentWorkspace?.name || "Sem workspace"}
               </span>
-              {currentRole && (
+              {currentWorkspaceRole && (
                 <Badge variant="secondary" className="text-[10px] px-1 py-0">
-                  {roleLabels[currentRole] || currentRole}
+                  {roleLabels[currentWorkspaceRole] || currentWorkspaceRole}
                 </Badge>
               )}
             </div>

@@ -3,7 +3,16 @@
       "context7": {
         "url": "https://mcp.context7.com/mcp",
         "headers": {
-          "CONTEXT7_API_KEY": "ctx7sk-64643697-bf72-4798-9bf4-256ac9a33539"
+          "CONTEXT7_API_KEY": "${CONTEXT7_API_KEY}"
+        }
+      },
+      "hostinger-mcp": {
+        "command": "npx",
+        "args": [
+          "hostinger-api-mcp@latest"
+        ],
+        "env": {
+          "API_TOKEN": "${HOSTINGER_API_TOKEN}"
         }
       }
     }

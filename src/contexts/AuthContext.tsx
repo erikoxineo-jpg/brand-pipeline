@@ -3,30 +3,29 @@ import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { Database } from "@/integrations/supabase/types";
 
-type AppRole = Database["public"]["Enums"]["app_role"];
+type WorkspaceRole = Database["public"]["Enums"]["workspace_role"];
 
-interface Brand {
+interface Workspace {
   id: string;
   name: string;
-  whatsapp_phone: string | null;
-  inactivity_days: number;
-  optout_keywords: string;
+  slug: string | null;
+  plan: string;
 }
 
-interface UserRole {
-  brand_id: string;
-  role: AppRole;
+interface WorkspaceMembership {
+  workspace_id: string;
+  role: WorkspaceRole;
 }
 
 interface AuthContextType {
   session: Session | null;
   user: User | null;
   profile: { display_name: string | null; avatar_url: string | null } | null;
-  brands: Brand[];
-  currentBrand: Brand | null;
-  currentRole: AppRole | null;
-  userRoles: UserRole[];
-  setCurrentBrandId: (id: string) => void;
+  workspaces: Workspace[];
+  currentWorkspace: Workspace | null;
+  currentWorkspaceRole: WorkspaceRole | null;
+  memberships: WorkspaceMembership[];
+  setCurrentWorkspaceId: (id: string) => void;
   loading: boolean;
   signOut: () => Promise<void>;
 }
@@ -37,32 +36,81 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<AuthContextType["profile"]>(null);
-  const [brands, setBrands] = useState<Brand[]>([]);
-  const [userRoles, setUserRoles] = useState<UserRole[]>([]);
-  const [currentBrandId, setCurrentBrandId] = useState<string | null>(null);
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [memberships, setMemberships] = useState<WorkspaceMembership[]>([]);
+  const [currentWorkspaceId, setCurrentWorkspaceId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const currentBrand = brands.find((b) => b.id === currentBrandId) || brands[0] || null;
-  const currentRole = userRoles.find((r) => r.brand_id === (currentBrand?.id))?.role || null;
+  const currentWorkspace =
+    workspaces.find((w) => w.id === currentWorkspaceId) || workspaces[0] || null;
+  const currentWorkspaceRole =
+    memberships.find((m) => m.workspace_id === currentWorkspace?.id)?.role || null;
 
   const fetchUserData = async (userId: string) => {
-    const [profileRes, rolesRes] = await Promise.all([
-      supabase.from("profiles").select("display_name, avatar_url").eq("user_id", userId).single(),
-      supabase.from("user_roles").select("brand_id, role").eq("user_id", userId),
-    ]);
+    const profileRes = await supabase
+      .from("profiles")
+      .select("display_name, avatar_url")
+      .eq("user_id", userId)
+      .single();
 
-    if (profileRes.data) setProfile(profileRes.data);
-    if (rolesRes.data) {
-      setUserRoles(rolesRes.data);
-      // Fetch brands the user has access to
-      const brandIds = rolesRes.data.map((r) => r.brand_id);
-      if (brandIds.length > 0) {
-        const brandsRes = await supabase.from("brands").select("*").in("id", brandIds);
-        if (brandsRes.data) {
-          setBrands(brandsRes.data);
-          if (!currentBrandId && brandsRes.data.length > 0) {
-            setCurrentBrandId(brandsRes.data[0].id);
-          }
+    if (profileRes.data) {
+      setProfile(profileRes.data);
+    }
+
+    // Ensure the user has at least one workspace; create a default one if needed.
+    const membershipsRes = await supabase
+      .from("workspace_members")
+      .select("workspace_id, role")
+      .eq("user_id", userId);
+
+    if (membershipsRes.error) {
+      // In case the table doesn't exist yet or RLS misconfigured, fail gracefully.
+      return;
+    }
+
+    let effectiveMemberships = membershipsRes.data ?? [];
+
+    if (!effectiveMemberships.length) {
+      const defaultName =
+        profileRes.data?.display_name || "Meu primeiro workspace";
+
+      const createdWorkspace = await supabase
+        .from("workspaces")
+        .insert({ name: defaultName })
+        .select("id")
+        .single();
+
+      if (createdWorkspace.error) {
+        // If workspace creation fails, we still keep the user logged in but without workspace context.
+        setMemberships([]);
+        setWorkspaces([]);
+        setCurrentWorkspaceId(null);
+        return;
+      }
+
+      const refreshedMemberships = await supabase
+        .from("workspace_members")
+        .select("workspace_id, role")
+        .eq("user_id", userId);
+
+      if (refreshedMemberships.data) {
+        effectiveMemberships = refreshedMemberships.data;
+      }
+    }
+
+    setMemberships(effectiveMemberships);
+
+    const workspaceIds = effectiveMemberships.map((m) => m.workspace_id);
+    if (workspaceIds.length > 0) {
+      const workspacesRes = await supabase
+        .from("workspaces")
+        .select("*")
+        .in("id", workspaceIds);
+
+      if (workspacesRes.data) {
+        setWorkspaces(workspacesRes.data);
+        if (!currentWorkspaceId && workspacesRes.data.length > 0) {
+          setCurrentWorkspaceId(workspacesRes.data[0].id);
         }
       }
     }
@@ -76,9 +124,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setTimeout(() => fetchUserData(session.user.id), 0);
       } else {
         setProfile(null);
-        setBrands([]);
-        setUserRoles([]);
-        setCurrentBrandId(null);
+        setWorkspaces([]);
+        setMemberships([]);
+        setCurrentWorkspaceId(null);
       }
     });
 
@@ -105,11 +153,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         session,
         user,
         profile,
-        brands,
-        currentBrand,
-        currentRole,
-        userRoles,
-        setCurrentBrandId,
+        workspaces,
+        currentWorkspace,
+        currentWorkspaceRole,
+        memberships,
+        setCurrentWorkspaceId,
         loading,
         signOut,
       }}

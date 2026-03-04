@@ -144,7 +144,7 @@ const LandingPage = () => {
       if (data?.url) {
         window.open(data.url, "_blank");
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       toast.error("Erro ao iniciar pagamento. Tente novamente.");
       console.error(err);
     } finally {
