@@ -9,7 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
 } from "@/components/ui/dialog";
-import { Building2, Users, Plus, Pencil, Trash2, Loader2, Wifi } from "lucide-react";
+import { Building2, Users, Plus, Pencil, Trash2, Loader2, Wifi, CreditCard, ExternalLink } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -27,8 +27,22 @@ const roleColors: Record<string, string> = {
   member: "bg-secondary text-secondary-foreground",
 };
 
+const planLabels: Record<string, string> = {
+  free: "Free",
+  starter: "Starter",
+  professional: "Professional",
+  business: "Business",
+};
+
+const statusLabels: Record<string, { label: string; color: string }> = {
+  active: { label: "Ativa", color: "bg-green-500/10 text-green-600" },
+  overdue: { label: "Atrasada", color: "bg-yellow-500/10 text-yellow-600" },
+  canceled: { label: "Cancelada", color: "bg-destructive/10 text-destructive" },
+  trial: { label: "Trial", color: "bg-blue-500/10 text-blue-600" },
+};
+
 const SettingsPage = () => {
-  const { currentWorkspace, user } = useAuth();
+  const { currentWorkspace, user, subscription } = useAuth();
   const queryClient = useQueryClient();
   const workspaceId = currentWorkspace?.id;
 
@@ -109,6 +123,23 @@ const SettingsPage = () => {
         ...m,
         profile: profileMap[m.user_id] || {},
       }));
+    },
+    enabled: !!workspaceId,
+  });
+
+  // Load payments history
+  const { data: payments = [] } = useQuery({
+    queryKey: ["payments", workspaceId],
+    queryFn: async () => {
+      if (!workspaceId) return [];
+      const { data, error } = await supabase
+        .from("payments")
+        .select("*")
+        .eq("workspace_id", workspaceId)
+        .order("created_at", { ascending: false })
+        .limit(20);
+      if (error) throw error;
+      return data;
     },
     enabled: !!workspaceId,
   });
@@ -249,6 +280,10 @@ const SettingsPage = () => {
             <Users className="h-4 w-4" />
             Usuários
           </TabsTrigger>
+          <TabsTrigger value="billing" className="gap-2">
+            <CreditCard className="h-4 w-4" />
+            Assinatura
+          </TabsTrigger>
         </TabsList>
 
         {/* Brand Tab */}
@@ -336,6 +371,117 @@ const SettingsPage = () => {
               </Button>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Billing Tab */}
+        <TabsContent value="billing" className="space-y-4 pt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Plano Atual</CardTitle>
+              <CardDescription>Informações sobre sua assinatura</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center gap-4">
+                <div>
+                  <p className="text-2xl font-bold text-foreground">
+                    {planLabels[subscription.plan] || subscription.plan}
+                  </p>
+                  {subscription.status && (
+                    <Badge variant="secondary" className={statusLabels[subscription.status]?.color || ""}>
+                      {statusLabels[subscription.status]?.label || subscription.status}
+                    </Badge>
+                  )}
+                  {!subscription.status && (
+                    <Badge variant="secondary" className="bg-secondary text-secondary-foreground">
+                      Sem assinatura
+                    </Badge>
+                  )}
+                </div>
+              </div>
+              {subscription.currentPeriodEnd && (
+                <p className="text-sm text-muted-foreground">
+                  Próxima cobrança: {new Date(subscription.currentPeriodEnd).toLocaleDateString("pt-BR")}
+                </p>
+              )}
+              <div className="grid grid-cols-3 gap-4 rounded-lg border p-4">
+                <div className="text-center">
+                  <p className="text-lg font-semibold">{subscription.limits.maxLeads.toLocaleString("pt-BR")}</p>
+                  <p className="text-xs text-muted-foreground">Leads</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-lg font-semibold">{subscription.limits.maxMessages.toLocaleString("pt-BR")}</p>
+                  <p className="text-xs text-muted-foreground">Msgs/mês</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-lg font-semibold">{subscription.limits.maxUsers}</p>
+                  <p className="text-xs text-muted-foreground">Usuários</p>
+                </div>
+              </div>
+              {subscription.plan === "free" && (
+                <Button size="sm" onClick={() => window.location.href = "/#pricing"}>
+                  Fazer Upgrade
+                </Button>
+              )}
+            </CardContent>
+          </Card>
+
+          {payments.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Histórico de Pagamentos</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Data</TableHead>
+                      <TableHead>Valor</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Tipo</TableHead>
+                      <TableHead className="w-20"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {payments.map((payment: any) => (
+                      <TableRow key={payment.id}>
+                        <TableCell>
+                          {new Date(payment.created_at).toLocaleDateString("pt-BR")}
+                        </TableCell>
+                        <TableCell className="font-medium">
+                          R$ {Number(payment.amount).toFixed(2).replace(".", ",")}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="secondary" className={
+                            payment.status === "confirmed" ? "bg-green-500/10 text-green-600" :
+                            payment.status === "overdue" ? "bg-yellow-500/10 text-yellow-600" :
+                            payment.status === "refunded" ? "bg-destructive/10 text-destructive" :
+                            "bg-secondary text-secondary-foreground"
+                          }>
+                            {payment.status === "confirmed" ? "Pago" :
+                             payment.status === "overdue" ? "Atrasado" :
+                             payment.status === "refunded" ? "Estornado" :
+                             "Pendente"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground text-sm">
+                          {payment.billing_type || "-"}
+                        </TableCell>
+                        <TableCell>
+                          {payment.invoice_url && (
+                            <a href={payment.invoice_url} target="_blank" rel="noopener noreferrer">
+                              <Button variant="ghost" size="icon" className="h-8 w-8">
+                                <ExternalLink className="h-3.5 w-3.5" />
+                              </Button>
+                            </a>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         {/* Users Tab */}

@@ -379,6 +379,113 @@ export type Database = {
           },
         ]
       }
+      subscriptions: {
+        Row: {
+          id: string
+          workspace_id: string
+          asaas_customer_id: string | null
+          asaas_subscription_id: string | null
+          plan: string
+          status: string
+          billing_type: string | null
+          current_period_start: string | null
+          current_period_end: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          workspace_id: string
+          asaas_customer_id?: string | null
+          asaas_subscription_id?: string | null
+          plan?: string
+          status?: string
+          billing_type?: string | null
+          current_period_start?: string | null
+          current_period_end?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          workspace_id?: string
+          asaas_customer_id?: string | null
+          asaas_subscription_id?: string | null
+          plan?: string
+          status?: string
+          billing_type?: string | null
+          current_period_start?: string | null
+          current_period_end?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscriptions_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payments: {
+        Row: {
+          id: string
+          workspace_id: string
+          subscription_id: string | null
+          asaas_payment_id: string | null
+          amount: number
+          status: string
+          billing_type: string | null
+          paid_at: string | null
+          due_date: string | null
+          invoice_url: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          workspace_id: string
+          subscription_id?: string | null
+          asaas_payment_id?: string | null
+          amount?: number
+          status?: string
+          billing_type?: string | null
+          paid_at?: string | null
+          due_date?: string | null
+          invoice_url?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          workspace_id?: string
+          subscription_id?: string | null
+          asaas_payment_id?: string | null
+          amount?: number
+          status?: string
+          billing_type?: string | null
+          paid_at?: string | null
+          due_date?: string | null
+          invoice_url?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payments_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payments_subscription_id_fkey"
+            columns: ["subscription_id"]
+            isOneToOne: false
+            referencedRelation: "subscriptions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       whatsapp_config: {
         Row: {
           id: string

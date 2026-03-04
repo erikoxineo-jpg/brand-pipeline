@@ -132,18 +132,17 @@ const LandingPage = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
 
-  const handleCheckout = useCallback(async (planId: string) => {
+  const handleCheckout = useCallback(async (planId: string, billingType = "PIX") => {
     setCheckoutLoading(planId);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
-        // Redirect to login with return info
         window.location.href = `/login?plan=${planId}`;
         return;
       }
 
       const { data, error } = await supabase.functions.invoke("create-checkout", {
-        body: { planId },
+        body: { planId, billingType },
       });
 
       if (error) throw error;
@@ -831,7 +830,7 @@ const LandingPage = () => {
               Planos que cabem no seu negócio
             </motion.h2>
             <motion.p variants={fadeUp} className="mt-4 text-lg text-muted-foreground">
-              Mensalidade fixa + setup único por volume de contatos. Sem surpresas.
+              Assinatura mensal simples. Pague via PIX, Boleto ou Cartão.
             </motion.p>
           </motion.div>
           <motion.div
@@ -839,45 +838,46 @@ const LandingPage = () => {
             whileInView="visible"
             viewport={{ once: true }}
             variants={stagger}
-            className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-4"
+            className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-3"
           >
             {[
               {
-                contacts: "1.000", planId: "1000", setup: "R$699", monthly: "R$99", highlight: false,
-                features: ["Disparos ilimitados", "1 operador", "1 marca", "Dashboard completo", "Pipeline Kanban"],
+                name: "Starter", planId: "starter", price: "R$97", highlight: false,
+                leads: "500 leads", messages: "1.000 msgs/mês", users: "1 usuário",
+                features: ["Dashboard completo", "Pipeline Kanban", "Importação de leads", "Suporte por e-mail"],
               },
               {
-                contacts: "5.000", planId: "5000", setup: "R$1.299", monthly: "R$99", highlight: true,
-                features: ["Disparos ilimitados", "3 operadores", "3 marcas", "Relatórios avançados", "Pipeline Kanban"],
+                name: "Professional", planId: "professional", price: "R$197", highlight: true,
+                leads: "2.000 leads", messages: "5.000 msgs/mês", users: "3 usuários",
+                features: ["Tudo do Starter", "Relatórios avançados", "Campanhas ilimitadas", "Suporte prioritário"],
               },
               {
-                contacts: "10.000", planId: "10000", setup: "R$1.999", monthly: "R$99", highlight: false,
-                features: ["Disparos ilimitados", "5 operadores", "5 marcas", "Relatórios + API", "Suporte prioritário"],
-              },
-              {
-                contacts: "25.000", planId: "25000", setup: "R$2.499", monthly: "R$99", highlight: false,
-                features: ["Disparos ilimitados", "Operadores ilimitados", "Marcas ilimitadas", "API completa", "Suporte prioritário"],
+                name: "Business", planId: "business", price: "R$397", highlight: false,
+                leads: "10.000 leads", messages: "20.000 msgs/mês", users: "10 usuários",
+                features: ["Tudo do Professional", "API completa", "Múltiplos workspaces", "Gerente de conta dedicado"],
               },
             ].map((plan) => (
-              <motion.div key={plan.contacts} variants={fadeUp}>
+              <motion.div key={plan.planId} variants={fadeUp}>
                 <Card className={`relative h-full border-border/50 transition-shadow hover:shadow-lg ${plan.highlight ? "border-primary shadow-lg ring-2 ring-primary/20" : ""}`}>
                   {plan.highlight && (
                     <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-primary px-3 py-0.5 text-xs font-semibold text-primary-foreground">
                       Mais Popular
                     </div>
                   )}
-                  <CardContent className="p-6 text-center">
-                    <p className="text-sm font-medium text-muted-foreground">Até</p>
-                    <p className="text-3xl font-bold text-foreground">{plan.contacts}</p>
-                    <p className="text-sm text-muted-foreground">contatos</p>
-                    <div className="my-6 border-t border-border" />
-                    <div className="mb-1">
-                      <span className="text-2xl font-bold text-foreground">{plan.monthly}</span>
+                  <CardContent className="p-6">
+                    <p className="text-lg font-semibold text-foreground">{plan.name}</p>
+                    <div className="mt-4 mb-1">
+                      <span className="text-3xl font-bold text-foreground">{plan.price}</span>
                       <span className="text-sm text-muted-foreground">/mês</span>
                     </div>
-                    <p className="text-xs text-muted-foreground">+ Setup único de {plan.setup}</p>
+                    <div className="my-6 border-t border-border" />
+                    <div className="space-y-2 text-sm text-muted-foreground mb-6">
+                      <p className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 shrink-0 text-primary" /> {plan.leads}</p>
+                      <p className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 shrink-0 text-primary" /> {plan.messages}</p>
+                      <p className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 shrink-0 text-primary" /> {plan.users}</p>
+                    </div>
                     <Button
-                      className="mt-6 w-full"
+                      className="w-full"
                       variant={plan.highlight ? "default" : "outline"}
                       onClick={() => handleCheckout(plan.planId)}
                       disabled={checkoutLoading === plan.planId}
@@ -894,6 +894,9 @@ const LandingPage = () => {
               </motion.div>
             ))}
           </motion.div>
+          <p className="mt-6 text-center text-sm text-muted-foreground">
+            Aceitamos PIX, Boleto e Cartão de Crédito. Cancele a qualquer momento.
+          </p>
         </div>
       </section>
 

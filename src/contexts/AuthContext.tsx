@@ -17,6 +17,22 @@ interface WorkspaceMembership {
   role: WorkspaceRole;
 }
 
+interface SubscriptionInfo {
+  plan: string;
+  status: string | null;
+  billingType: string | null;
+  limits: { maxLeads: number; maxMessages: number; maxUsers: number };
+  currentPeriodEnd: string | null;
+}
+
+const defaultSubscription: SubscriptionInfo = {
+  plan: "free",
+  status: null,
+  billingType: null,
+  limits: { maxLeads: 50, maxMessages: 100, maxUsers: 1 },
+  currentPeriodEnd: null,
+};
+
 interface AuthContextType {
   session: Session | null;
   user: User | null;
@@ -25,6 +41,7 @@ interface AuthContextType {
   currentWorkspace: Workspace | null;
   currentWorkspaceRole: WorkspaceRole | null;
   memberships: WorkspaceMembership[];
+  subscription: SubscriptionInfo;
   setCurrentWorkspaceId: (id: string) => void;
   loading: boolean;
   signOut: () => Promise<void>;
@@ -39,6 +56,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [memberships, setMemberships] = useState<WorkspaceMembership[]>([]);
   const [currentWorkspaceId, setCurrentWorkspaceId] = useState<string | null>(null);
+  const [subscription, setSubscription] = useState<SubscriptionInfo>(defaultSubscription);
   const [loading, setLoading] = useState(true);
 
   const currentWorkspace =
@@ -108,6 +126,36 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         if (!currentWorkspaceId && workspacesRes.data.length > 0) {
           setCurrentWorkspaceId(workspacesRes.data[0].id);
         }
+
+        // Fetch subscription for first workspace
+        const wsId = workspacesRes.data[0]?.id;
+        if (wsId) {
+          const { data: sub } = await supabase
+            .from("subscriptions")
+            .select("plan, status, billing_type, current_period_end")
+            .eq("workspace_id", wsId)
+            .in("status", ["active", "overdue", "trial"])
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (sub) {
+            const planLimits: Record<string, { maxLeads: number; maxMessages: number; maxUsers: number }> = {
+              starter: { maxLeads: 500, maxMessages: 1000, maxUsers: 1 },
+              professional: { maxLeads: 2000, maxMessages: 5000, maxUsers: 3 },
+              business: { maxLeads: 10000, maxMessages: 20000, maxUsers: 10 },
+            };
+            setSubscription({
+              plan: sub.plan,
+              status: sub.status,
+              billingType: sub.billing_type,
+              limits: planLimits[sub.plan] || defaultSubscription.limits,
+              currentPeriodEnd: sub.current_period_end,
+            });
+          } else {
+            setSubscription(defaultSubscription);
+          }
+        }
       }
     }
   };
@@ -123,6 +171,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setWorkspaces([]);
         setMemberships([]);
         setCurrentWorkspaceId(null);
+        setSubscription(defaultSubscription);
       }
     });
 
@@ -153,6 +202,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         currentWorkspace,
         currentWorkspaceRole,
         memberships,
+        subscription,
         setCurrentWorkspaceId,
         loading,
         signOut,
