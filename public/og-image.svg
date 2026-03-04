@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" fill="none">
+  <rect width="1200" height="630" fill="#1E293B"/>
+  <rect x="40" y="40" width="1120" height="550" rx="24" fill="#0F172A" stroke="#334155" stroke-width="2"/>
+
+  <!-- Logo icon -->
+  <rect x="480" y="140" width="64" height="64" rx="16" fill="#7C3AED"/>
+  <path d="M497 157.5C497 156.119 498.119 155 499.5 155H504.5C507.538 155 510 157.462 510 160.5C510 162.668 508.785 164.549 507 165.472V165.5L510.5 169.5H507L504 166H501V169.5H497V157.5ZM501 162.5H504.5C505.605 162.5 506.5 161.605 506.5 160.5C506.5 159.395 505.605 158.5 504.5 158.5H501V162.5Z" fill="white"/>
+
+  <!-- Brand name -->
+  <text x="555" y="183" font-family="system-ui, -apple-system, sans-serif" font-size="42" font-weight="700" fill="white">ReConnect</text>
+
+  <!-- Tagline -->
+  <text x="600" y="280" font-family="system-ui, -apple-system, sans-serif" font-size="36" font-weight="600" fill="white" text-anchor="middle">CRM de Reativação de Clientes</text>
+  <text x="600" y="330" font-family="system-ui, -apple-system, sans-serif" font-size="36" font-weight="600" fill="#7C3AED" text-anchor="middle">via WhatsApp</text>
+
+  <!-- Subtitle -->
+  <text x="600" y="400" font-family="system-ui, -apple-system, sans-serif" font-size="20" fill="#94A3B8" text-anchor="middle">Importe sua base, crie campanhas inteligentes e acompanhe</text>
+  <text x="600" y="430" font-family="system-ui, -apple-system, sans-serif" font-size="20" fill="#94A3B8" text-anchor="middle">cada reativação em tempo real.</text>
+
+  <!-- URL -->
+  <text x="600" y="520" font-family="system-ui, -apple-system, sans-serif" font-size="18" fill="#64748B" text-anchor="middle">reconnect.oxineo.com.br</text>
+</svg>

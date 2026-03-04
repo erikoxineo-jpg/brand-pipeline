@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { MessageSquare } from "lucide-react";
+import { MessageSquare, Mail, CheckCircle2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
@@ -18,6 +18,7 @@ const Login = () => {
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [loading, setLoading] = useState(false);
+  const [signUpSuccess, setSignUpSuccess] = useState(false);
 
   if (session) return <Navigate to="/dashboard" replace />;
 
@@ -27,8 +28,14 @@ const Login = () => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     setLoading(false);
     if (error) {
-      toast({ title: "Erro ao entrar", description: error.message, variant: "destructive" });
+      const msg = error.message === "Invalid login credentials"
+        ? "E-mail ou senha incorretos."
+        : error.message === "Email not confirmed"
+        ? "Confirme seu e-mail antes de entrar. Verifique sua caixa de entrada."
+        : error.message;
+      toast({ title: "Erro ao entrar", description: msg, variant: "destructive" });
     } else {
+      toast({ title: "Bem-vindo de volta!", description: "Login realizado com sucesso." });
       navigate("/dashboard");
     }
   };
@@ -36,7 +43,7 @@ const Login = () => {
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    const { error } = await supabase.auth.signUp({
+    const { error, data } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -46,9 +53,14 @@ const Login = () => {
     });
     setLoading(false);
     if (error) {
-      toast({ title: "Erro ao cadastrar", description: error.message, variant: "destructive" });
+      const msg = error.message.includes("already registered")
+        ? "Este e-mail já está cadastrado. Tente fazer login."
+        : error.message;
+      toast({ title: "Erro ao cadastrar", description: msg, variant: "destructive" });
+    } else if (data.user?.identities?.length === 0) {
+      toast({ title: "E-mail já cadastrado", description: "Este e-mail já possui uma conta. Tente fazer login.", variant: "destructive" });
     } else {
-      toast({ title: "Conta criada!", description: "Verifique seu e-mail para confirmar." });
+      setSignUpSuccess(true);
     }
   };
 
@@ -65,62 +77,94 @@ const Login = () => {
           </div>
         </div>
 
-        <Card>
-          <Tabs defaultValue="login">
-            <TabsList className="w-full">
-              <TabsTrigger value="login" className="flex-1">Entrar</TabsTrigger>
-              <TabsTrigger value="signup" className="flex-1">Criar Conta</TabsTrigger>
-            </TabsList>
+        {signUpSuccess ? (
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex flex-col items-center gap-4 text-center">
+                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
+                  <Mail className="h-8 w-8 text-primary" />
+                </div>
+                <div className="space-y-2">
+                  <h2 className="text-lg font-semibold text-foreground">Verifique seu e-mail</h2>
+                  <p className="text-sm text-muted-foreground">
+                    Enviamos um link de confirmação para <strong className="text-foreground">{email}</strong>
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Clique no link do e-mail para ativar sua conta. Verifique também a pasta de spam.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/50 px-4 py-3 text-xs text-muted-foreground">
+                  <CheckCircle2 className="h-4 w-4 shrink-0 text-green-500" />
+                  <span>Após confirmar, volte aqui e faça login.</span>
+                </div>
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => setSignUpSuccess(false)}
+                >
+                  Voltar para o login
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card>
+            <Tabs defaultValue="login">
+              <TabsList className="w-full">
+                <TabsTrigger value="login" className="flex-1">Entrar</TabsTrigger>
+                <TabsTrigger value="signup" className="flex-1">Criar Conta</TabsTrigger>
+              </TabsList>
 
-            <TabsContent value="login">
-              <CardHeader className="pb-4">
-                <CardTitle className="text-lg">Entrar</CardTitle>
-                <CardDescription>Acesse sua conta para continuar</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <form onSubmit={handleLogin} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="login-email">E-mail</Label>
-                    <Input id="login-email" type="email" placeholder="seu@email.com" value={email} onChange={(e) => setEmail(e.target.value)} required />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="login-password">Senha</Label>
-                    <Input id="login-password" type="password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} required />
-                  </div>
-                  <Button type="submit" className="w-full" disabled={loading}>
-                    {loading ? "Entrando..." : "Entrar"}
-                  </Button>
-                </form>
-              </CardContent>
-            </TabsContent>
+              <TabsContent value="login">
+                <CardHeader className="pb-4">
+                  <CardTitle className="text-lg">Entrar</CardTitle>
+                  <CardDescription>Acesse sua conta para continuar</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <form onSubmit={handleLogin} className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="login-email">E-mail</Label>
+                      <Input id="login-email" type="email" placeholder="seu@email.com" value={email} onChange={(e) => setEmail(e.target.value)} required />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="login-password">Senha</Label>
+                      <Input id="login-password" type="password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} required />
+                    </div>
+                    <Button type="submit" className="w-full" disabled={loading}>
+                      {loading ? "Entrando..." : "Entrar"}
+                    </Button>
+                  </form>
+                </CardContent>
+              </TabsContent>
 
-            <TabsContent value="signup">
-              <CardHeader className="pb-4">
-                <CardTitle className="text-lg">Criar Conta</CardTitle>
-                <CardDescription>Crie sua conta para começar</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <form onSubmit={handleSignUp} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="signup-name">Nome</Label>
-                    <Input id="signup-name" placeholder="Seu nome" value={displayName} onChange={(e) => setDisplayName(e.target.value)} required />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="signup-email">E-mail</Label>
-                    <Input id="signup-email" type="email" placeholder="seu@email.com" value={email} onChange={(e) => setEmail(e.target.value)} required />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="signup-password">Senha</Label>
-                    <Input id="signup-password" type="password" placeholder="Mínimo 6 caracteres" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6} />
-                  </div>
-                  <Button type="submit" className="w-full" disabled={loading}>
-                    {loading ? "Criando..." : "Criar Conta"}
-                  </Button>
-                </form>
-              </CardContent>
-            </TabsContent>
-          </Tabs>
-        </Card>
+              <TabsContent value="signup">
+                <CardHeader className="pb-4">
+                  <CardTitle className="text-lg">Criar Conta</CardTitle>
+                  <CardDescription>Crie sua conta para começar</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <form onSubmit={handleSignUp} className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="signup-name">Nome</Label>
+                      <Input id="signup-name" placeholder="Seu nome" value={displayName} onChange={(e) => setDisplayName(e.target.value)} required />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="signup-email">E-mail</Label>
+                      <Input id="signup-email" type="email" placeholder="seu@email.com" value={email} onChange={(e) => setEmail(e.target.value)} required />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="signup-password">Senha</Label>
+                      <Input id="signup-password" type="password" placeholder="Mínimo 6 caracteres" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6} />
+                    </div>
+                    <Button type="submit" className="w-full" disabled={loading}>
+                      {loading ? "Criando..." : "Criar Conta"}
+                    </Button>
+                  </form>
+                </CardContent>
+              </TabsContent>
+            </Tabs>
+          </Card>
+        )}
       </div>
     </div>
   );

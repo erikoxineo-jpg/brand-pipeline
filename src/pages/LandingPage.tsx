@@ -3,7 +3,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Link, useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -24,7 +24,16 @@ import {
   Calculator,
   Menu,
   X,
+  Lock,
+  Headphones,
+  HelpCircle,
 } from "lucide-react";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import heroBg from "@/assets/hero-bg.jpg";
 import screenshotDashboard from "@/assets/screenshot-dashboard.png";
 import screenshotLeads from "@/assets/screenshot-leads.png";
@@ -76,9 +85,9 @@ const features = [
   },
   {
     icon: Shield,
-    title: "Multi-tenant & RBAC",
+    title: "Equipes & Permissões",
     description:
-      "Gerencie múltiplas marcas com controle de acesso por papel: Admin, Gestor e Operador. Dados isolados por brand.",
+      "Gerencie múltiplas lojas ou marcas com controle de acesso por papel: Admin, Gestor e Operador. Cada marca com dados isolados.",
   },
   {
     icon: Zap,
@@ -90,24 +99,24 @@ const features = [
 
 const testimonials = [
   {
-    name: "Marina Costa",
-    role: "Gerente de Marketing — Glow Cosmetics",
+    name: "Dra. Fernanda Lima",
+    role: "Diretora — Clínica Vitale",
     content:
-      "Reativamos 23% da base inativa em apenas 2 semanas. Clientes voltaram comprando kits de skincare pelo WhatsApp. ROI absurdo!",
+      "Reativamos 23% dos pacientes inativos em apenas 2 semanas. Agendamentos pelo WhatsApp dispararam e o retorno foi imediato.",
     stars: 5,
   },
   {
-    name: "Carlos Mendes",
-    role: "Diretor — Beleza Pura Cosméticos",
+    name: "Ricardo Santos",
+    role: "Gerente — Boutique Essenza",
     content:
       "O pipeline Kanban é genial. Consigo ver exatamente em que etapa cada cliente está e meus operadores sabem exatamente o que fazer.",
     stars: 5,
   },
   {
-    name: "Juliana Alves",
-    role: "Head de Vendas — Essence Beauty",
+    name: "Camila Rocha",
+    role: "Proprietária — PetVida",
     content:
-      "De 4.000 clientes inativos, recuperamos 340 em 30 dias. Vendas de perfumes e maquiagens dispararam com as campanhas de reativação.",
+      "De 4.000 clientes inativos, recuperamos 340 em 30 dias. Vendas de rações e banho & tosa dispararam com as campanhas de reativação.",
     stars: 5,
   },
 ];
@@ -167,7 +176,7 @@ const LandingPage = () => {
             <a href="#features" className="text-sm text-muted-foreground transition-colors hover:text-foreground">Funcionalidades</a>
             <a href="#screenshots" className="text-sm text-muted-foreground transition-colors hover:text-foreground">Plataforma</a>
             <a href="#pricing" className="text-sm text-muted-foreground transition-colors hover:text-foreground">Planos</a>
-            <a href="#testimonials" className="text-sm text-muted-foreground transition-colors hover:text-foreground">Depoimentos</a>
+            <a href="#faq" className="text-sm text-muted-foreground transition-colors hover:text-foreground">FAQ</a>
           </div>
           <div className="hidden items-center gap-3 md:flex">
             <Button
@@ -203,7 +212,7 @@ const LandingPage = () => {
             <a href="#features" onClick={() => setMobileMenuOpen(false)} className="block text-sm text-muted-foreground py-2 hover:text-foreground">Funcionalidades</a>
             <a href="#screenshots" onClick={() => setMobileMenuOpen(false)} className="block text-sm text-muted-foreground py-2 hover:text-foreground">Plataforma</a>
             <a href="#pricing" onClick={() => setMobileMenuOpen(false)} className="block text-sm text-muted-foreground py-2 hover:text-foreground">Planos</a>
-            <a href="#testimonials" onClick={() => setMobileMenuOpen(false)} className="block text-sm text-muted-foreground py-2 hover:text-foreground">Depoimentos</a>
+            <a href="#faq" onClick={() => setMobileMenuOpen(false)} className="block text-sm text-muted-foreground py-2 hover:text-foreground">FAQ</a>
             <div className="border-t border-border/50 pt-3 flex flex-col gap-2">
               <Button
                 variant="outline"
@@ -298,6 +307,9 @@ const LandingPage = () => {
               </motion.div>
             ))}
           </motion.div>
+          <p className="mt-6 text-center text-xs text-muted-foreground">
+            * Dados baseados em benchmarks de mercado de campanhas WhatsApp Business no Brasil.
+          </p>
         </div>
       </section>
 
@@ -381,15 +393,22 @@ const LandingPage = () => {
                 </button>
               ))}
             </div>
-            <div className="overflow-hidden rounded-xl border border-border bg-card shadow-2xl">
-              <img
-                src={screenshots[activeScreenshot].src}
-                alt={screenshots[activeScreenshot].alt}
-                className="w-full"
-                loading="lazy"
-                width={1280}
-                height={720}
-              />
+            <div className="relative overflow-hidden rounded-xl border border-border bg-card shadow-2xl">
+              <AnimatePresence mode="wait">
+                <motion.img
+                  key={activeScreenshot}
+                  src={screenshots[activeScreenshot].src}
+                  alt={screenshots[activeScreenshot].alt}
+                  className="w-full"
+                  loading="lazy"
+                  width={1280}
+                  height={720}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.3 }}
+                />
+              </AnimatePresence>
             </div>
           </motion.div>
         </div>
@@ -463,21 +482,21 @@ const LandingPage = () => {
             {[
               {
                 img: whatsappClinica,
-                brand: "Glow Cosmetics",
-                segment: "Skincare & Cuidados com a Pele",
-                result: "23% de reativação — clientes comprando kits de skincare pelo WhatsApp",
+                brand: "Clínica Vitale",
+                segment: "Clínica de Estética & Saúde",
+                result: "23% de reativação — pacientes agendando consultas pelo WhatsApp",
               },
               {
                 img: whatsappModa,
-                brand: "Beleza Pura",
-                segment: "Loja de Maquiagens",
+                brand: "Boutique Essenza",
+                segment: "Moda Feminina",
                 result: "340 clientes recuperados em 30 dias com ofertas de nova coleção",
               },
               {
                 img: whatsappPetshop,
-                brand: "Essence Beauty",
-                segment: "Perfumaria & Cosméticos",
-                result: "R$47.000 em vendas de perfumes recuperadas no primeiro mês",
+                brand: "PetVida",
+                segment: "Pet Shop & Veterinária",
+                result: "R$47.000 em vendas recuperadas no primeiro mês com banho, tosa e rações",
               },
             ].map((chat) => (
               <motion.div key={chat.brand} variants={fadeUp} className="text-center">
@@ -527,23 +546,23 @@ const LandingPage = () => {
                     plan: "Plano 1.000 contatos",
                     invest: "R$ 699 + R$ 99/mês",
                     reactivated: "340 clientes",
-                    example: "Uma loja de skincare com ticket médio de R$ 150 pode gerar R$ 51.000 em vendas de cosméticos reativadas.",
-                    roi: "65x o investimento",
+                    example: "Uma clínica de estética com ticket médio de R$ 250 pode gerar R$ 85.000 em agendamentos reativados.",
+                    roi: "107x o investimento",
                   },
                   {
                     plan: "Plano 5.000 contatos",
                     invest: "R$ 1.299 + R$ 99/mês",
                     reactivated: "1.700 clientes",
-                    example: "Uma marca de maquiagens com ticket médio de R$ 80 pode recuperar R$ 136.000 em vendas recorrentes.",
-                    roi: "97x o investimento",
+                    example: "Uma loja de roupas com ticket médio de R$ 120 pode recuperar R$ 204.000 em vendas recorrentes.",
+                    roi: "146x o investimento",
                     highlight: true,
                   },
                   {
                     plan: "Plano 10.000 contatos",
                     invest: "R$ 1.999 + R$ 99/mês",
                     reactivated: "3.400 clientes",
-                    example: "Uma perfumaria com ticket médio de R$ 200 pode faturar R$ 680.000 em vendas de fragrâncias reativadas.",
-                    roi: "324x o investimento",
+                    example: "Um pet shop com ticket médio de R$ 80 pode faturar R$ 272.000 em vendas de rações e serviços reativados.",
+                    roi: "130x o investimento",
                   },
                 ].map((item) => (
                   <Card key={item.plan} className={`border-border/50 transition-shadow hover:shadow-lg ${item.highlight ? "border-primary ring-2 ring-primary/20" : ""}`}>
@@ -619,8 +638,90 @@ const LandingPage = () => {
         </div>
       </section>
 
+      {/* FAQ */}
+      <section id="faq" className="py-20 sm:py-28">
+        <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
+          <motion.div
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true }}
+            variants={stagger}
+            className="text-center"
+          >
+            <motion.div variants={fadeUp} className="mb-4 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-4 py-1.5 text-sm text-primary">
+              <HelpCircle className="h-4 w-4" />
+              Dúvidas Frequentes
+            </motion.div>
+            <motion.h2 variants={fadeUp} className="text-3xl font-bold text-foreground sm:text-4xl">
+              Perguntas frequentes
+            </motion.h2>
+            <motion.p variants={fadeUp} className="mt-4 text-lg text-muted-foreground">
+              Tudo que você precisa saber antes de começar.
+            </motion.p>
+          </motion.div>
+          <motion.div
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true }}
+            variants={fadeUp}
+            className="mt-12"
+          >
+            <Accordion type="single" collapsible className="w-full">
+              <AccordionItem value="api">
+                <AccordionTrigger className="text-left text-base hover:no-underline">
+                  Preciso ter WhatsApp Business API?
+                </AccordionTrigger>
+                <AccordionContent className="text-muted-foreground">
+                  Sim, o ReConnect se integra via API oficial do WhatsApp Business. Se você ainda não tem, podemos ajudar na configuração durante o onboarding.
+                </AccordionContent>
+              </AccordionItem>
+              <AccordionItem value="import">
+                <AccordionTrigger className="text-left text-base hover:no-underline">
+                  Como funciona a importação de contatos?
+                </AccordionTrigger>
+                <AccordionContent className="text-muted-foreground">
+                  Basta subir um arquivo Excel (.xlsx) com sua base de clientes. A plataforma normaliza automaticamente os telefones para o padrão internacional e remove duplicatas em segundos.
+                </AccordionContent>
+              </AccordionItem>
+              <AccordionItem value="limits">
+                <AccordionTrigger className="text-left text-base hover:no-underline">
+                  Existe limite de disparos?
+                </AccordionTrigger>
+                <AccordionContent className="text-muted-foreground">
+                  Não há limite de disparos em nenhum plano. O limite é de contatos na base ativa. Você pode enviar quantas campanhas quiser para os contatos do seu plano.
+                </AccordionContent>
+              </AccordionItem>
+              <AccordionItem value="cancel">
+                <AccordionTrigger className="text-left text-base hover:no-underline">
+                  Posso cancelar a qualquer momento?
+                </AccordionTrigger>
+                <AccordionContent className="text-muted-foreground">
+                  Sim, sem multa e sem burocracia. A mensalidade é cobrada mensalmente e pode ser cancelada quando quiser diretamente pelo painel.
+                </AccordionContent>
+              </AccordionItem>
+              <AccordionItem value="security">
+                <AccordionTrigger className="text-left text-base hover:no-underline">
+                  Meus dados estão seguros?
+                </AccordionTrigger>
+                <AccordionContent className="text-muted-foreground">
+                  Sim. Utilizamos criptografia em trânsito e em repouso, servidores seguros com certificado SSL e estamos em conformidade com a LGPD. Seus dados e os de seus clientes estão protegidos.
+                </AccordionContent>
+              </AccordionItem>
+              <AccordionItem value="time">
+                <AccordionTrigger className="text-left text-base hover:no-underline">
+                  Quanto tempo leva para começar?
+                </AccordionTrigger>
+                <AccordionContent className="text-muted-foreground">
+                  Menos de 2 minutos. Crie sua conta, importe sua base de clientes e lance sua primeira campanha de reativação em poucos cliques.
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
+          </motion.div>
+        </div>
+      </section>
+
       {/* Pricing */}
-      <section id="pricing" className="py-20 sm:py-28">
+      <section id="pricing" className="bg-muted/30 py-20 sm:py-28">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <motion.div
             initial="hidden"
@@ -644,10 +745,22 @@ const LandingPage = () => {
             className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-4"
           >
             {[
-              { contacts: "1.000", planId: "1000", setup: "R$699", monthly: "R$99", highlight: false },
-              { contacts: "5.000", planId: "5000", setup: "R$1.299", monthly: "R$99", highlight: true },
-              { contacts: "10.000", planId: "10000", setup: "R$1.999", monthly: "R$99", highlight: false },
-              { contacts: "25.000", planId: "25000", setup: "R$2.499", monthly: "R$99", highlight: false },
+              {
+                contacts: "1.000", planId: "1000", setup: "R$699", monthly: "R$99", highlight: false,
+                features: ["Disparos ilimitados", "1 operador", "1 marca", "Dashboard completo", "Pipeline Kanban"],
+              },
+              {
+                contacts: "5.000", planId: "5000", setup: "R$1.299", monthly: "R$99", highlight: true,
+                features: ["Disparos ilimitados", "3 operadores", "3 marcas", "Relatórios avançados", "Pipeline Kanban"],
+              },
+              {
+                contacts: "10.000", planId: "10000", setup: "R$1.999", monthly: "R$99", highlight: false,
+                features: ["Disparos ilimitados", "5 operadores", "5 marcas", "Relatórios + API", "Suporte prioritário"],
+              },
+              {
+                contacts: "25.000", planId: "25000", setup: "R$2.499", monthly: "R$99", highlight: false,
+                features: ["Disparos ilimitados", "Operadores ilimitados", "Marcas ilimitadas", "API completa", "Suporte prioritário"],
+              },
             ].map((plan) => (
               <motion.div key={plan.contacts} variants={fadeUp}>
                 <Card className={`relative h-full border-border/50 transition-shadow hover:shadow-lg ${plan.highlight ? "border-primary shadow-lg ring-2 ring-primary/20" : ""}`}>
@@ -675,10 +788,9 @@ const LandingPage = () => {
                       {checkoutLoading === plan.planId ? "Aguarde..." : "Começar Agora"}
                     </Button>
                     <ul className="mt-4 space-y-2 text-left text-sm text-muted-foreground">
-                      <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-primary" /> Disparos ilimitados</li>
-                      <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-primary" /> Dashboard completo</li>
-                      <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-primary" /> Pipeline Kanban</li>
-                      <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-primary" /> Suporte dedicado</li>
+                      {plan.features.map((f) => (
+                        <li key={f} className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 shrink-0 text-primary" /> {f}</li>
+                      ))}
                     </ul>
                   </CardContent>
                 </Card>
@@ -699,27 +811,64 @@ const LandingPage = () => {
             className="rounded-2xl bg-primary px-8 py-16 text-center sm:px-16"
           >
             <h2 className="text-3xl font-bold text-primary-foreground sm:text-4xl">
-              Comece a reativar clientes hoje
+              Seus clientes inativos estão comprando do concorrente
             </h2>
             <p className="mx-auto mt-4 max-w-xl text-lg text-primary-foreground/80">
-              A partir de R$99/mês. Setup rápido e suporte dedicado para sua operação.
+              Recupere-os agora. Comece em 2 minutos — sem cartão de crédito para criar sua conta.
             </p>
             <div className="mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row">
-              <a href="#pricing">
+              <Link to="/login">
                 <Button
                   size="lg"
                   variant="secondary"
                   className="h-12 gap-2 px-8 text-base font-semibold"
                 >
-                  Ver Planos <ArrowRight className="h-5 w-5" />
+                  Criar Conta Grátis <ArrowRight className="h-5 w-5" />
+                </Button>
+              </Link>
+              <a href="#pricing">
+                <Button
+                  size="lg"
+                  variant="ghost"
+                  className="h-12 px-8 text-base text-primary-foreground/90 hover:text-primary-foreground hover:bg-primary-foreground/10"
+                >
+                  Ver Planos
                 </Button>
               </a>
             </div>
             <div className="mt-6 flex flex-wrap items-center justify-center gap-6 text-sm text-primary-foreground/70">
               <span className="flex items-center gap-1.5"><CheckCircle2 className="h-4 w-4" /> Setup em 2 minutos</span>
               <span className="flex items-center gap-1.5"><CheckCircle2 className="h-4 w-4" /> Disparos ilimitados</span>
-              <span className="flex items-center gap-1.5"><CheckCircle2 className="h-4 w-4" /> Suporte dedicado</span>
+              <span className="flex items-center gap-1.5"><CheckCircle2 className="h-4 w-4" /> Cancele quando quiser</span>
             </div>
+          </motion.div>
+        </div>
+      </section>
+
+      {/* Trust Signals */}
+      <section className="border-y border-border bg-muted/30 py-12">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <motion.div
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true }}
+            variants={stagger}
+            className="grid grid-cols-2 gap-6 sm:grid-cols-4"
+          >
+            {[
+              { icon: Shield, label: "LGPD Compliant", desc: "Em conformidade com a lei de proteção de dados" },
+              { icon: Lock, label: "Dados Criptografados", desc: "SSL + criptografia em repouso" },
+              { icon: MessageSquare, label: "API WhatsApp Oficial", desc: "Integração certificada pelo Meta" },
+              { icon: Headphones, label: "Suporte Dedicado", desc: "Atendimento humano em todos os planos" },
+            ].map((item) => (
+              <motion.div key={item.label} variants={fadeUp} className="flex flex-col items-center gap-2 text-center">
+                <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-primary/10">
+                  <item.icon className="h-5 w-5 text-primary" />
+                </div>
+                <p className="text-sm font-semibold text-foreground">{item.label}</p>
+                <p className="text-xs text-muted-foreground">{item.desc}</p>
+              </motion.div>
+            ))}
           </motion.div>
         </div>
       </section>
@@ -727,15 +876,49 @@ const LandingPage = () => {
       {/* Footer */}
       <footer className="border-t border-border py-12">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col items-center justify-between gap-6 sm:flex-row">
-            <div className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-                <MessageSquare className="h-4 w-4 text-primary-foreground" />
+          <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
+            {/* Col 1 — Brand */}
+            <div>
+              <div className="flex items-center gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
+                  <MessageSquare className="h-4 w-4 text-primary-foreground" />
+                </div>
+                <span className="font-bold text-foreground">ReConnect</span>
               </div>
-              <span className="font-bold text-foreground">ReConnect</span>
+              <p className="mt-3 text-sm text-muted-foreground">
+                CRM de reativação de clientes inativos via WhatsApp. Transforme clientes esquecidos em receita recorrente.
+              </p>
             </div>
+            {/* Col 2 — Produto */}
+            <div>
+              <p className="mb-3 text-sm font-semibold text-foreground">Produto</p>
+              <ul className="space-y-2 text-sm text-muted-foreground">
+                <li><a href="#features" className="hover:text-foreground transition-colors">Funcionalidades</a></li>
+                <li><a href="#screenshots" className="hover:text-foreground transition-colors">Plataforma</a></li>
+                <li><a href="#pricing" className="hover:text-foreground transition-colors">Planos</a></li>
+                <li><a href="#testimonials" className="hover:text-foreground transition-colors">Depoimentos</a></li>
+              </ul>
+            </div>
+            {/* Col 3 — Suporte */}
+            <div>
+              <p className="mb-3 text-sm font-semibold text-foreground">Suporte</p>
+              <ul className="space-y-2 text-sm text-muted-foreground">
+                <li><a href="#faq" className="hover:text-foreground transition-colors">Perguntas Frequentes</a></li>
+                <li><a href="mailto:contato@oxineo.com.br" className="hover:text-foreground transition-colors">contato@oxineo.com.br</a></li>
+              </ul>
+            </div>
+            {/* Col 4 — Legal */}
+            <div>
+              <p className="mb-3 text-sm font-semibold text-foreground">Legal</p>
+              <ul className="space-y-2 text-sm text-muted-foreground">
+                <li><a href="#" className="hover:text-foreground transition-colors">Termos de Uso</a></li>
+                <li><a href="#" className="hover:text-foreground transition-colors">Política de Privacidade</a></li>
+              </ul>
+            </div>
+          </div>
+          <div className="mt-8 border-t border-border pt-8 text-center">
             <p className="text-sm text-muted-foreground">
-              © {new Date().getFullYear()} ReConnect. CRM de reativação via WhatsApp.
+              © {new Date().getFullYear()} ReConnect. Todos os direitos reservados.
             </p>
           </div>
         </div>
