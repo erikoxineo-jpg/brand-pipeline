@@ -14,6 +14,7 @@ import Campaigns from "./pages/Campaigns";
 import Pipeline from "./pages/Pipeline";
 import Dispatches from "./pages/Dispatches";
 import SettingsPage from "./pages/SettingsPage";
+import Manual from "./pages/Manual";
 import NotFound from "./pages/NotFound";
 import LandingPage from "./pages/LandingPage";
 import MobileWarning from "./pages/MobileWarning";
@@ -45,6 +46,7 @@ const App = () => (
               <Route path="/pipeline" element={<Pipeline />} />
               <Route path="/dispatches" element={<Dispatches />} />
               <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/manual" element={<Manual />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>

@@ -1,30 +1,9 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Users, MessageSquare, TrendingUp, ShoppingCart, ArrowUpRight, ArrowDownRight } from "lucide-react";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from "recharts";
+import { Users, MessageSquare, TrendingUp, ShoppingCart, ArrowUpRight } from "lucide-react";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from "recharts";
 import { useAuth } from "@/contexts/AuthContext";
-
-const kpis = [
-  { title: "Leads Ativos", value: "4.328", change: "+12%", up: true, icon: Users },
-  { title: "Disparos Hoje", value: "287", change: "+8%", up: true, icon: MessageSquare },
-  { title: "Taxa Resposta", value: "34.2%", change: "+2.1%", up: true, icon: TrendingUp },
-  { title: "Reativações", value: "89", change: "-3%", up: false, icon: ShoppingCart },
-];
-
-const funnelData = [
-  { name: "Importados", value: 4328 },
-  { name: "Elegíveis", value: 2150 },
-  { name: "Contactados", value: 1200 },
-  { name: "Responderam", value: 410 },
-  { name: "Reativados", value: 89 },
-];
-
-const reasonsData = [
-  { name: "Preço alto", value: 35 },
-  { name: "Esqueceu", value: 28 },
-  { name: "Concorrência", value: 18 },
-  { name: "Insatisfação", value: 12 },
-  { name: "Outros", value: 7 },
-];
+import { supabase } from "@/integrations/supabase/client";
+import { useQuery } from "@tanstack/react-query";
 
 const COLORS = [
   "hsl(221, 83%, 53%)",
@@ -32,27 +11,178 @@ const COLORS = [
   "hsl(38, 92%, 50%)",
   "hsl(280, 67%, 55%)",
   "hsl(0, 84%, 60%)",
+  "hsl(190, 70%, 50%)",
+  "hsl(340, 80%, 55%)",
 ];
 
-const operatorData = [
-  { name: "Ana", disparos: 120, respostas: 45, reativacoes: 18 },
-  { name: "Carlos", disparos: 98, respostas: 38, reativacoes: 12 },
-  { name: "Maria", disparos: 85, respostas: 32, reativacoes: 15 },
-  { name: "João", disparos: 72, respostas: 25, reativacoes: 8 },
-];
-
-const weeklyData = [
-  { day: "Seg", disparos: 45, respostas: 18 },
-  { day: "Ter", disparos: 52, respostas: 22 },
-  { day: "Qua", disparos: 38, respostas: 15 },
-  { day: "Qui", disparos: 65, respostas: 28 },
-  { day: "Sex", disparos: 48, respostas: 20 },
-  { day: "Sáb", disparos: 30, respostas: 12 },
-  { day: "Dom", disparos: 9, respostas: 3 },
-];
+const STAGE_LABELS: Record<string, string> = {
+  imported: "Importados",
+  eligible: "Elegíveis",
+  ready: "Pronto",
+  contacted: "Contactados",
+  replied: "Responderam",
+  reactivated: "Reativados",
+  optout: "Opt-out",
+};
 
 const Dashboard = () => {
   const { currentWorkspace } = useAuth();
+  const workspaceId = currentWorkspace?.id;
+
+  // Lead counts by stage
+  const { data: leadStages = [] } = useQuery({
+    queryKey: ["dashboard-leads", workspaceId],
+    queryFn: async () => {
+      if (!workspaceId) return [];
+      const { data, error } = await supabase
+        .from("leads")
+        .select("stage")
+        .eq("workspace_id", workspaceId);
+      if (error) throw error;
+
+      const counts: Record<string, number> = {};
+      for (const lead of data || []) {
+        counts[lead.stage] = (counts[lead.stage] || 0) + 1;
+      }
+
+      return Object.entries(STAGE_LABELS).map(([key, label]) => ({
+        name: label,
+        value: counts[key] || 0,
+        key,
+      }));
+    },
+    enabled: !!workspaceId,
+  });
+
+  // Dispatch stats
+  const { data: dispatchStats } = useQuery({
+    queryKey: ["dashboard-dispatches", workspaceId],
+    queryFn: async () => {
+      if (!workspaceId) return { today: 0, total: 0, replied: 0, sent: 0 };
+
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+
+      const { data, error } = await supabase
+        .from("dispatches")
+        .select("status, sent_at")
+        .eq("workspace_id", workspaceId);
+      if (error) throw error;
+
+      let today = 0;
+      let sent = 0;
+      let replied = 0;
+
+      for (const d of data || []) {
+        if (["sent", "delivered", "read", "replied"].includes(d.status)) sent++;
+        if (d.status === "replied") replied++;
+        if (d.sent_at && new Date(d.sent_at) >= todayStart) today++;
+      }
+
+      return { today, total: data?.length || 0, replied, sent };
+    },
+    enabled: !!workspaceId,
+  });
+
+  // Weekly dispatches (last 7 days)
+  const { data: weeklyData = [] } = useQuery({
+    queryKey: ["dashboard-weekly", workspaceId],
+    queryFn: async () => {
+      if (!workspaceId) return [];
+
+      const days = [];
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        days.push(d.toISOString().slice(0, 10));
+      }
+
+      const startDate = days[0] + "T00:00:00Z";
+      const { data, error } = await supabase
+        .from("dispatches")
+        .select("status, sent_at")
+        .eq("workspace_id", workspaceId)
+        .gte("created_at", startDate);
+      if (error) throw error;
+
+      const dayLabels = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+
+      return days.map((day) => {
+        const dayDispatches = (data || []).filter(
+          (d) => d.sent_at && d.sent_at.slice(0, 10) === day
+        );
+        const date = new Date(day + "T12:00:00");
+        return {
+          day: dayLabels[date.getDay()],
+          disparos: dayDispatches.length,
+          respostas: dayDispatches.filter((d) => d.status === "replied").length,
+        };
+      });
+    },
+    enabled: !!workspaceId,
+  });
+
+  // Operator performance
+  const { data: operatorData = [] } = useQuery({
+    queryKey: ["dashboard-operators", workspaceId],
+    queryFn: async () => {
+      if (!workspaceId) return [];
+
+      // Get all workspace members
+      const { data: members, error: membersErr } = await supabase
+        .from("workspace_members")
+        .select("user_id")
+        .eq("workspace_id", workspaceId);
+      if (membersErr) throw membersErr;
+
+      const userIds = (members || []).map((m) => m.user_id);
+      if (!userIds.length) return [];
+
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("user_id, display_name")
+        .in("user_id", userIds);
+
+      const profileMap: Record<string, string> = {};
+      for (const p of profiles || []) {
+        profileMap[p.user_id] = p.display_name || "Sem nome";
+      }
+
+      // Get imports (as a proxy for who created dispatches)
+      const { data: imports } = await supabase
+        .from("imports")
+        .select("created_by, new_leads")
+        .eq("workspace_id", workspaceId);
+
+      const opStats: Record<string, { name: string; leads: number }> = {};
+      for (const imp of imports || []) {
+        if (!imp.created_by) continue;
+        if (!opStats[imp.created_by]) {
+          opStats[imp.created_by] = {
+            name: profileMap[imp.created_by] || "Usuário",
+            leads: 0,
+          };
+        }
+        opStats[imp.created_by].leads += imp.new_leads || 0;
+      }
+
+      return Object.values(opStats).sort((a, b) => b.leads - a.leads);
+    },
+    enabled: !!workspaceId,
+  });
+
+  const totalLeads = leadStages.reduce((sum, s) => sum + s.value, 0);
+  const reactivated = leadStages.find((s) => s.key === "reactivated")?.value || 0;
+  const responseRate = dispatchStats?.sent
+    ? ((dispatchStats.replied / dispatchStats.sent) * 100).toFixed(1)
+    : "0";
+
+  const kpis = [
+    { title: "Leads Ativos", value: totalLeads.toLocaleString(), icon: Users },
+    { title: "Disparos Hoje", value: String(dispatchStats?.today || 0), icon: MessageSquare },
+    { title: "Taxa Resposta", value: `${responseRate}%`, icon: TrendingUp },
+    { title: "Reativações", value: String(reactivated), icon: ShoppingCart },
+  ];
 
   if (!currentWorkspace) {
     return (
@@ -60,7 +190,7 @@ const Dashboard = () => {
         <div className="text-center space-y-2">
           <h1 className="text-xl font-semibold text-foreground">Nenhum workspace disponível</h1>
           <p className="text-sm text-muted-foreground">
-            Sua conta ainda não possui um workspace ativo. Faça login novamente ou entre em contato com o suporte.
+            Sua conta ainda não possui um workspace ativo.
           </p>
         </div>
       </div>
@@ -85,14 +215,6 @@ const Dashboard = () => {
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
                   <kpi.icon className="h-5 w-5 text-primary" />
                 </div>
-                <span
-                  className={`flex items-center gap-0.5 text-xs font-medium ${
-                    kpi.up ? "text-success" : "text-destructive"
-                  }`}
-                >
-                  {kpi.up ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
-                  {kpi.change}
-                </span>
               </div>
               <div className="mt-3">
                 <p className="text-2xl font-semibold text-foreground">{kpi.value}</p>
@@ -111,11 +233,11 @@ const Dashboard = () => {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {funnelData.map((item, i) => {
-                const maxVal = funnelData[0].value;
+              {leadStages.filter((s) => s.key !== "optout").map((item, i) => {
+                const maxVal = Math.max(...leadStages.map((s) => s.value), 1);
                 const pct = (item.value / maxVal) * 100;
                 return (
-                  <div key={item.name} className="space-y-1">
+                  <div key={item.key} className="space-y-1">
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-muted-foreground">{item.name}</span>
                       <span className="font-medium text-foreground">{item.value.toLocaleString()}</span>
@@ -123,43 +245,12 @@ const Dashboard = () => {
                     <div className="h-2 rounded-full bg-secondary">
                       <div
                         className="h-2 rounded-full transition-all"
-                        style={{ width: `${pct}%`, backgroundColor: COLORS[i] }}
+                        style={{ width: `${pct}%`, backgroundColor: COLORS[i % COLORS.length] }}
                       />
                     </div>
                   </div>
                 );
               })}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Reasons Pie */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base font-medium">Motivos de Inatividade</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center gap-6">
-              <div className="h-48 w-48">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie data={reasonsData} cx="50%" cy="50%" innerRadius={40} outerRadius={70} dataKey="value" strokeWidth={2} stroke="hsl(var(--card))">
-                      {reasonsData.map((_, i) => (
-                        <Cell key={i} fill={COLORS[i]} />
-                      ))}
-                    </Pie>
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="space-y-2">
-                {reasonsData.map((item, i) => (
-                  <div key={item.name} className="flex items-center gap-2 text-sm">
-                    <div className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: COLORS[i] }} />
-                    <span className="text-muted-foreground">{item.name}</span>
-                    <span className="ml-auto font-medium text-foreground">{item.value}%</span>
-                  </div>
-                ))}
-              </div>
             </div>
           </CardContent>
         </Card>
@@ -186,25 +277,26 @@ const Dashboard = () => {
         </Card>
 
         {/* Operator Performance */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base font-medium">Performance por Operador</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="h-52">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={operatorData} layout="vertical">
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                  <XAxis type="number" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }} />
-                  <YAxis dataKey="name" type="category" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }} width={50} />
-                  <Tooltip contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px" }} />
-                  <Bar dataKey="disparos" fill="hsl(221, 83%, 53%)" radius={[0, 4, 4, 0]} />
-                  <Bar dataKey="reativacoes" fill="hsl(142, 71%, 45%)" radius={[0, 4, 4, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
+        {operatorData.length > 0 && (
+          <Card className="lg:col-span-2">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base font-medium">Performance por Operador</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="h-52">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={operatorData} layout="vertical">
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                    <XAxis type="number" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }} />
+                    <YAxis dataKey="name" type="category" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }} width={80} />
+                    <Tooltip contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px" }} />
+                    <Bar dataKey="leads" fill="hsl(221, 83%, 53%)" radius={[0, 4, 4, 0]} name="Leads importados" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </div>
   );

@@ -1,25 +1,219 @@
-import { useState } from "react";
+import { useState, useRef, useCallback } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Upload, FileSpreadsheet, CheckCircle2, XCircle, Clock } from "lucide-react";
+import { Upload, FileSpreadsheet, CheckCircle2, XCircle, Loader2 } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import * as XLSX from "xlsx";
 
-const importHistory = [
-  { id: 1, file: "clientes_jan2025.xlsx", date: "2025-01-15 14:32", total: 1250, new: 980, dupes: 270, status: "success" },
-  { id: 2, file: "base_reativacao.xlsx", date: "2025-01-10 09:15", total: 3200, new: 2800, dupes: 400, status: "success" },
-  { id: 3, file: "leads_parceiro.xlsx", date: "2025-01-05 16:45", total: 500, new: 0, dupes: 0, status: "error" },
-  { id: 4, file: "clientes_dez2024.xlsx", date: "2024-12-20 11:00", total: 890, new: 750, dupes: 140, status: "success" },
+type FieldMapping = "name" | "phone" | "email" | "last_purchase" | "ignore";
+
+const FIELD_OPTIONS: { value: FieldMapping; label: string }[] = [
+  { value: "name", label: "Nome" },
+  { value: "phone", label: "Telefone" },
+  { value: "email", label: "E-mail" },
+  { value: "last_purchase", label: "Última Compra" },
+  { value: "ignore", label: "Ignorar" },
 ];
 
-const previewData = [
-  { col_a: "Maria Silva", col_b: "11999887766", col_c: "maria@email.com", col_d: "2024-08-15" },
-  { col_a: "João Santos", col_b: "11988776655", col_c: "joao@email.com", col_d: "2024-10-01" },
-  { col_a: "Ana Oliveira", col_b: "11977665544", col_c: "ana@email.com", col_d: "2024-06-20" },
-];
+function normalizePhone(raw: string): string | null {
+  if (!raw) return null;
+  const digits = String(raw).replace(/\D/g, "");
+  if (digits.length === 10 || digits.length === 11) return `+55${digits}`;
+  if (digits.length === 12 || digits.length === 13) return `+${digits}`;
+  if (digits.length >= 10 && digits.startsWith("55")) return `+${digits}`;
+  return null;
+}
+
+function calcDaysInactive(dateStr: string | null): number | null {
+  if (!dateStr) return null;
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return null;
+  return Math.floor((Date.now() - d.getTime()) / 86400000);
+}
 
 const Imports = () => {
-  const [showPreview, setShowPreview] = useState(false);
+  const { currentWorkspace, user } = useAuth();
+  const queryClient = useQueryClient();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [fileName, setFileName] = useState<string | null>(null);
+  const [rawRows, setRawRows] = useState<string[][]>([]);
+  const [headers, setHeaders] = useState<string[]>([]);
+  const [mappings, setMappings] = useState<FieldMapping[]>([]);
+  const [importing, setImporting] = useState(false);
+
+  const workspaceId = currentWorkspace?.id;
+
+  // Fetch import history
+  const { data: importHistory = [] } = useQuery({
+    queryKey: ["imports", workspaceId],
+    queryFn: async () => {
+      if (!workspaceId) return [];
+      const { data, error } = await supabase
+        .from("imports")
+        .select("*")
+        .eq("workspace_id", workspaceId)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!workspaceId,
+  });
+
+  const handleFileSelect = useCallback((file: File) => {
+    setFileName(file.name);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const data = new Uint8Array(e.target?.result as ArrayBuffer);
+      const workbook = XLSX.read(data, { type: "array" });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const json: string[][] = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+
+      if (json.length < 2) {
+        toast.error("Arquivo vazio ou sem dados suficientes");
+        return;
+      }
+
+      const hdrs = json[0].map(String);
+      setHeaders(hdrs);
+      setRawRows(json.slice(1, 6)); // preview first 5 rows
+
+      // Auto-guess mappings
+      const guessed: FieldMapping[] = hdrs.map((h) => {
+        const lower = h.toLowerCase();
+        if (lower.includes("nome") || lower.includes("name")) return "name";
+        if (lower.includes("tel") || lower.includes("phone") || lower.includes("cel") || lower.includes("whats")) return "phone";
+        if (lower.includes("email") || lower.includes("e-mail")) return "email";
+        if (lower.includes("compra") || lower.includes("purchase") || lower.includes("data") || lower.includes("date")) return "last_purchase";
+        return "ignore";
+      });
+      setMappings(guessed);
+
+      // Store all rows for import
+      (window as any).__importAllRows = json.slice(1);
+    };
+    reader.readAsArrayBuffer(file);
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    const file = e.dataTransfer.files[0];
+    if (file) handleFileSelect(file);
+  }, [handleFileSelect]);
+
+  const handleImport = async () => {
+    if (!workspaceId || !user) return;
+    const allRows: string[][] = (window as any).__importAllRows || [];
+    if (!allRows.length) return;
+
+    setImporting(true);
+
+    const phoneIdx = mappings.indexOf("phone");
+    if (phoneIdx === -1) {
+      toast.error("Mapeie pelo menos a coluna de Telefone");
+      setImporting(false);
+      return;
+    }
+
+    const nameIdx = mappings.indexOf("name");
+    const emailIdx = mappings.indexOf("email");
+    const purchaseIdx = mappings.indexOf("last_purchase");
+
+    const leads = allRows
+      .map((row) => {
+        const phone = normalizePhone(row[phoneIdx] || "");
+        if (!phone) return null;
+        const lastPurchase = purchaseIdx >= 0 ? String(row[purchaseIdx] || "") : null;
+        return {
+          workspace_id: workspaceId,
+          name: nameIdx >= 0 ? String(row[nameIdx] || "") : null,
+          phone,
+          email: emailIdx >= 0 ? String(row[emailIdx] || "") : null,
+          last_purchase: lastPurchase || null,
+          days_inactive: calcDaysInactive(lastPurchase),
+          stage: "imported" as const,
+        };
+      })
+      .filter(Boolean) as any[];
+
+    const total = leads.length;
+    let newLeads = 0;
+    let duplicates = 0;
+    let errorMsg: string | null = null;
+
+    try {
+      // Batch insert in chunks of 500
+      const chunkSize = 500;
+      for (let i = 0; i < leads.length; i += chunkSize) {
+        const chunk = leads.slice(i, i + chunkSize);
+        const { data, error } = await supabase
+          .from("leads")
+          .upsert(chunk, { onConflict: "workspace_id,phone", ignoreDuplicates: true })
+          .select("id");
+
+        if (error) throw error;
+        newLeads += data?.length || 0;
+      }
+      duplicates = total - newLeads;
+
+      // Create import record
+      await supabase.from("imports").insert({
+        workspace_id: workspaceId,
+        filename: fileName || "unknown.xlsx",
+        total,
+        new_leads: newLeads,
+        duplicates,
+        status: "success",
+        created_by: user.id,
+      });
+
+      toast.success(`Importação concluída: ${newLeads} novos, ${duplicates} duplicatas`);
+      setFileName(null);
+      setRawRows([]);
+      setHeaders([]);
+      setMappings([]);
+      (window as any).__importAllRows = null;
+    } catch (err: any) {
+      errorMsg = err.message || "Erro desconhecido";
+      toast.error(`Erro na importação: ${errorMsg}`);
+
+      await supabase.from("imports").insert({
+        workspace_id: workspaceId,
+        filename: fileName || "unknown.xlsx",
+        total,
+        new_leads: newLeads,
+        duplicates,
+        status: "error",
+        error_message: errorMsg,
+        created_by: user.id,
+      });
+    } finally {
+      setImporting(false);
+      queryClient.invalidateQueries({ queryKey: ["imports", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: ["leads"] });
+    }
+  };
+
+  const cancelPreview = () => {
+    setFileName(null);
+    setRawRows([]);
+    setHeaders([]);
+    setMappings([]);
+    (window as any).__importAllRows = null;
+  };
+
+  if (!currentWorkspace) {
+    return (
+      <div className="flex h-full items-center justify-center p-6">
+        <p className="text-muted-foreground">Nenhum workspace ativo.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-6">
@@ -31,21 +225,36 @@ const Imports = () => {
       {/* Upload Area */}
       <Card>
         <CardContent className="p-8">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".xlsx,.xls,.csv"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) handleFileSelect(file);
+              e.target.value = "";
+            }}
+          />
           <div
             className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-border p-10 text-center transition-colors hover:border-primary/50 hover:bg-primary/5 cursor-pointer"
-            onClick={() => setShowPreview(true)}
+            onClick={() => fileInputRef.current?.click()}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={handleDrop}
           >
             <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 mb-4">
               <Upload className="h-6 w-6 text-primary" />
             </div>
-            <p className="text-sm font-medium text-foreground">Arraste um arquivo .xlsx ou clique para selecionar</p>
-            <p className="mt-1 text-xs text-muted-foreground">Suporta arquivos até 10MB</p>
+            <p className="text-sm font-medium text-foreground">
+              {fileName || "Arraste um arquivo .xlsx ou clique para selecionar"}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">Suporta .xlsx, .xls e .csv até 10MB</p>
           </div>
         </CardContent>
       </Card>
 
       {/* Preview & Mapping */}
-      {showPreview && (
+      {rawRows.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Preview & Mapeamento</CardTitle>
@@ -56,51 +265,36 @@ const Imports = () => {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>
-                      <select className="rounded-md border border-input bg-background px-2 py-1 text-xs">
-                        <option>→ Nome</option>
-                        <option>→ Telefone</option>
-                        <option>→ E-mail</option>
-                        <option>→ Última Compra</option>
-                        <option>Ignorar</option>
-                      </select>
-                    </TableHead>
-                    <TableHead>
-                      <select className="rounded-md border border-input bg-background px-2 py-1 text-xs">
-                        <option>→ Telefone</option>
-                        <option>→ Nome</option>
-                        <option>→ E-mail</option>
-                        <option>→ Última Compra</option>
-                        <option>Ignorar</option>
-                      </select>
-                    </TableHead>
-                    <TableHead>
-                      <select className="rounded-md border border-input bg-background px-2 py-1 text-xs">
-                        <option>→ E-mail</option>
-                        <option>→ Nome</option>
-                        <option>→ Telefone</option>
-                        <option>→ Última Compra</option>
-                        <option>Ignorar</option>
-                      </select>
-                    </TableHead>
-                    <TableHead>
-                      <select className="rounded-md border border-input bg-background px-2 py-1 text-xs">
-                        <option>→ Última Compra</option>
-                        <option>→ Nome</option>
-                        <option>→ Telefone</option>
-                        <option>→ E-mail</option>
-                        <option>Ignorar</option>
-                      </select>
-                    </TableHead>
+                    {headers.map((h, i) => (
+                      <TableHead key={i}>
+                        <div className="space-y-1">
+                          <span className="text-xs text-muted-foreground">{h}</span>
+                          <select
+                            className="block w-full rounded-md border border-input bg-background px-2 py-1 text-xs"
+                            value={mappings[i] || "ignore"}
+                            onChange={(e) => {
+                              const next = [...mappings];
+                              next[i] = e.target.value as FieldMapping;
+                              setMappings(next);
+                            }}
+                          >
+                            {FIELD_OPTIONS.map((opt) => (
+                              <option key={opt.value} value={opt.value}>
+                                → {opt.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </TableHead>
+                    ))}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {previewData.map((row, i) => (
+                  {rawRows.map((row, i) => (
                     <TableRow key={i}>
-                      <TableCell>{row.col_a}</TableCell>
-                      <TableCell>{row.col_b}</TableCell>
-                      <TableCell>{row.col_c}</TableCell>
-                      <TableCell>{row.col_d}</TableCell>
+                      {row.map((cell, j) => (
+                        <TableCell key={j}>{String(cell ?? "")}</TableCell>
+                      ))}
                     </TableRow>
                   ))}
                 </TableBody>
@@ -111,10 +305,13 @@ const Imports = () => {
                 Telefones serão normalizados para E.164 · Duplicatas por telefone serão ignoradas
               </p>
               <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={() => setShowPreview(false)}>
+                <Button variant="outline" size="sm" onClick={cancelPreview} disabled={importing}>
                   Cancelar
                 </Button>
-                <Button size="sm">Importar 3 leads</Button>
+                <Button size="sm" onClick={handleImport} disabled={importing}>
+                  {importing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Importar {((window as any).__importAllRows || []).length} leads
+                </Button>
               </div>
             </div>
           </CardContent>
@@ -139,31 +336,41 @@ const Imports = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {importHistory.map((imp) => (
-                <TableRow key={imp.id}>
-                  <TableCell>
-                    <span className="flex items-center gap-2">
-                      <FileSpreadsheet className="h-4 w-4 text-success" />
-                      {imp.file}
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">{imp.date}</TableCell>
-                  <TableCell>{imp.total.toLocaleString()}</TableCell>
-                  <TableCell className="text-success">{imp.new.toLocaleString()}</TableCell>
-                  <TableCell className="text-warning">{imp.dupes.toLocaleString()}</TableCell>
-                  <TableCell>
-                    {imp.status === "success" ? (
-                      <Badge variant="secondary" className="bg-success/10 text-success">
-                        <CheckCircle2 className="mr-1 h-3 w-3" /> Concluído
-                      </Badge>
-                    ) : (
-                      <Badge variant="secondary" className="bg-destructive/10 text-destructive">
-                        <XCircle className="mr-1 h-3 w-3" /> Erro
-                      </Badge>
-                    )}
+              {importHistory.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                    Nenhuma importação ainda
                   </TableCell>
                 </TableRow>
-              ))}
+              ) : (
+                importHistory.map((imp) => (
+                  <TableRow key={imp.id}>
+                    <TableCell>
+                      <span className="flex items-center gap-2">
+                        <FileSpreadsheet className="h-4 w-4 text-success" />
+                        {imp.filename}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {new Date(imp.created_at).toLocaleString("pt-BR")}
+                    </TableCell>
+                    <TableCell>{imp.total.toLocaleString()}</TableCell>
+                    <TableCell className="text-success">{imp.new_leads.toLocaleString()}</TableCell>
+                    <TableCell className="text-warning">{imp.duplicates.toLocaleString()}</TableCell>
+                    <TableCell>
+                      {imp.status === "success" ? (
+                        <Badge variant="secondary" className="bg-success/10 text-success">
+                          <CheckCircle2 className="mr-1 h-3 w-3" /> Concluído
+                        </Badge>
+                      ) : (
+                        <Badge variant="secondary" className="bg-destructive/10 text-destructive">
+                          <XCircle className="mr-1 h-3 w-3" /> Erro
+                        </Badge>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
             </TableBody>
           </Table>
         </CardContent>

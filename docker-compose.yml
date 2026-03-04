@@ -1,6 +1,11 @@
 services:
   app:
-    build: .
+    build:
+      context: .
+      args:
+        VITE_SUPABASE_URL: https://xbmhfijiljrwnifeqmei.supabase.co
+        VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_1rKOgC-lCnCsalDejfltHg_KnqBgS46
+        VITE_SUPABASE_PROJECT_ID: xbmhfijiljrwnifeqmei
     container_name: reconnect-app
     restart: unless-stopped
     ports:

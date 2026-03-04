@@ -1,47 +1,132 @@
 import { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Search, Filter, Download, Phone, Mail } from "lucide-react";
+import { Search, Download, Phone, Mail, ChevronLeft, ChevronRight, Ban } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 
-const mockLeads = [
-  { id: 1, name: "Maria Silva", phone: "+5511999887766", email: "maria@email.com", lastPurchase: "2024-08-15", daysInactive: 180, stage: "Pronto para contato", optOut: false },
-  { id: 2, name: "João Santos", phone: "+5511988776655", email: "joao@email.com", lastPurchase: "2024-10-01", daysInactive: 133, stage: "Contactado", optOut: false },
-  { id: 3, name: "Ana Oliveira", phone: "+5511977665544", email: "ana@email.com", lastPurchase: "2024-06-20", daysInactive: 236, stage: "Respondeu", optOut: false },
-  { id: 4, name: "Carlos Souza", phone: "+5511966554433", email: "carlos@email.com", lastPurchase: "2024-11-10", daysInactive: 93, stage: "Elegível", optOut: false },
-  { id: 5, name: "Paula Lima", phone: "+5511955443322", email: "paula@email.com", lastPurchase: "2024-05-01", daysInactive: 286, stage: "Opt-out", optOut: true },
-  { id: 6, name: "Roberto Alves", phone: "+5511944332211", email: "roberto@email.com", lastPurchase: "2024-09-22", daysInactive: 143, stage: "Reativado", optOut: false },
-  { id: 7, name: "Fernanda Costa", phone: "+5511933221100", email: "fernanda@email.com", lastPurchase: "2024-07-05", daysInactive: 221, stage: "Pronto para contato", optOut: false },
-  { id: 8, name: "Lucas Pereira", phone: "+5511922110099", email: "lucas@email.com", lastPurchase: "2024-12-01", daysInactive: 62, stage: "Importado", optOut: false },
-];
+const STAGES = ["imported", "eligible", "ready", "contacted", "replied", "reactivated", "optout"] as const;
 
-const stageColors: Record<string, string> = {
-  "Importado": "bg-secondary text-secondary-foreground",
-  "Elegível": "bg-warning/10 text-warning",
-  "Pronto para contato": "bg-primary/10 text-primary",
-  "Contactado": "bg-chart-4/10 text-chart-4",
-  "Respondeu": "bg-success/10 text-success",
-  "Reativado": "bg-success text-success-foreground",
-  "Opt-out": "bg-destructive/10 text-destructive",
+const stageLabels: Record<string, string> = {
+  imported: "Importado",
+  eligible: "Elegível",
+  ready: "Pronto para contato",
+  contacted: "Contactado",
+  replied: "Respondeu",
+  reactivated: "Reativado",
+  optout: "Opt-out",
 };
 
-const Leads = () => {
-  const [search, setSearch] = useState("");
+const stageColors: Record<string, string> = {
+  imported: "bg-secondary text-secondary-foreground",
+  eligible: "bg-warning/10 text-warning",
+  ready: "bg-primary/10 text-primary",
+  contacted: "bg-chart-4/10 text-chart-4",
+  replied: "bg-success/10 text-success",
+  reactivated: "bg-success text-success-foreground",
+  optout: "bg-destructive/10 text-destructive",
+};
 
-  const filtered = mockLeads.filter(
-    (l) => l.name.toLowerCase().includes(search.toLowerCase()) || l.phone.includes(search)
-  );
+const PAGE_SIZE = 20;
+
+const Leads = () => {
+  const { currentWorkspace } = useAuth();
+  const queryClient = useQueryClient();
+  const [search, setSearch] = useState("");
+  const [stageFilter, setStageFilter] = useState<string>("all");
+  const [page, setPage] = useState(0);
+  const [editingStage, setEditingStage] = useState<string | null>(null);
+
+  const workspaceId = currentWorkspace?.id;
+
+  const { data, isLoading } = useQuery({
+    queryKey: ["leads", workspaceId, search, stageFilter, page],
+    queryFn: async () => {
+      if (!workspaceId) return { leads: [], count: 0 };
+
+      let query = supabase
+        .from("leads")
+        .select("*", { count: "exact" })
+        .eq("workspace_id", workspaceId)
+        .order("created_at", { ascending: false })
+        .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
+
+      if (search) {
+        query = query.or(`name.ilike.%${search}%,phone.ilike.%${search}%`);
+      }
+      if (stageFilter !== "all") {
+        query = query.eq("stage", stageFilter);
+      }
+
+      const { data: leads, error, count } = await query;
+      if (error) throw error;
+      return { leads: leads || [], count: count || 0 };
+    },
+    enabled: !!workspaceId,
+  });
+
+  const leads = data?.leads || [];
+  const totalCount = data?.count || 0;
+  const totalPages = Math.ceil(totalCount / PAGE_SIZE);
+
+  const updateStageMutation = useMutation({
+    mutationFn: async ({ id, stage }: { id: string; stage: string }) => {
+      const updates: any = { stage };
+      if (stage === "optout") updates.opt_out = true;
+      if (stage !== "optout") updates.opt_out = false;
+      const { error } = await supabase.from("leads").update(updates).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["leads"] });
+      setEditingStage(null);
+      toast.success("Stage atualizado");
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+
+  const handleExportCSV = () => {
+    if (!leads.length) return;
+    const csvHeaders = ["Nome", "Telefone", "E-mail", "Última Compra", "Dias Inativo", "Etapa"];
+    const csvRows = leads.map((l) => [
+      l.name || "",
+      l.phone || "",
+      l.email || "",
+      l.last_purchase || "",
+      String(l.days_inactive ?? ""),
+      stageLabels[l.stage] || l.stage,
+    ]);
+    const csvContent = [csvHeaders, ...csvRows].map((r) => r.map((c) => `"${c}"`).join(",")).join("\n");
+    const blob = new Blob(["\ufeff" + csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "leads.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  if (!currentWorkspace) {
+    return (
+      <div className="flex h-full items-center justify-center p-6">
+        <p className="text-muted-foreground">Nenhum workspace ativo.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-foreground">Leads</h1>
-          <p className="text-sm text-muted-foreground">{mockLeads.length} leads na base</p>
+          <p className="text-sm text-muted-foreground">{totalCount} leads na base</p>
         </div>
-        <Button variant="outline" size="sm">
+        <Button variant="outline" size="sm" onClick={handleExportCSV}>
           <Download className="mr-2 h-4 w-4" />
           Exportar
         </Button>
@@ -55,14 +140,26 @@ const Leads = () => {
               <Input
                 placeholder="Buscar por nome ou telefone..."
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(0);
+                }}
                 className="pl-9"
               />
             </div>
-            <Button variant="outline" size="sm">
-              <Filter className="mr-2 h-4 w-4" />
-              Filtros
-            </Button>
+            <select
+              className="rounded-md border border-input bg-background px-3 py-2 text-sm"
+              value={stageFilter}
+              onChange={(e) => {
+                setStageFilter(e.target.value);
+                setPage(0);
+              }}
+            >
+              <option value="all">Todas etapas</option>
+              {STAGES.map((s) => (
+                <option key={s} value={s}>{stageLabels[s]}</option>
+              ))}
+            </select>
           </div>
         </CardHeader>
         <CardContent className="p-0">
@@ -75,39 +172,106 @@ const Leads = () => {
                 <TableHead>Última Compra</TableHead>
                 <TableHead>Dias Inativo</TableHead>
                 <TableHead>Etapa</TableHead>
+                <TableHead className="w-16">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.map((lead) => (
-                <TableRow key={lead.id} className="cursor-pointer">
-                  <TableCell className="font-medium">{lead.name}</TableCell>
-                  <TableCell>
-                    <span className="flex items-center gap-1.5">
-                      <Phone className="h-3 w-3 text-muted-foreground" />
-                      {lead.phone}
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    <span className="flex items-center gap-1.5">
-                      <Mail className="h-3 w-3 text-muted-foreground" />
-                      {lead.email}
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">{lead.lastPurchase}</TableCell>
-                  <TableCell>
-                    <span className={lead.daysInactive > 180 ? "text-destructive font-medium" : "text-foreground"}>
-                      {lead.daysInactive}d
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="secondary" className={stageColors[lead.stage] || ""}>
-                      {lead.stage}
-                    </Badge>
+              {isLoading ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                    Carregando...
                   </TableCell>
                 </TableRow>
-              ))}
+              ) : leads.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                    Nenhum lead encontrado
+                  </TableCell>
+                </TableRow>
+              ) : (
+                leads.map((lead) => (
+                  <TableRow key={lead.id}>
+                    <TableCell className="font-medium">{lead.name || "—"}</TableCell>
+                    <TableCell>
+                      <span className="flex items-center gap-1.5">
+                        <Phone className="h-3 w-3 text-muted-foreground" />
+                        {lead.phone || "—"}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      {lead.email ? (
+                        <span className="flex items-center gap-1.5">
+                          <Mail className="h-3 w-3 text-muted-foreground" />
+                          {lead.email}
+                        </span>
+                      ) : "—"}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{lead.last_purchase || "—"}</TableCell>
+                    <TableCell>
+                      {lead.days_inactive != null ? (
+                        <span className={lead.days_inactive > 180 ? "text-destructive font-medium" : "text-foreground"}>
+                          {lead.days_inactive}d
+                        </span>
+                      ) : "—"}
+                    </TableCell>
+                    <TableCell>
+                      {editingStage === lead.id ? (
+                        <select
+                          className="rounded-md border border-input bg-background px-2 py-1 text-xs"
+                          value={lead.stage}
+                          autoFocus
+                          onChange={(e) => updateStageMutation.mutate({ id: lead.id, stage: e.target.value })}
+                          onBlur={() => setEditingStage(null)}
+                        >
+                          {STAGES.map((s) => (
+                            <option key={s} value={s}>{stageLabels[s]}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <Badge
+                          variant="secondary"
+                          className={`cursor-pointer ${stageColors[lead.stage] || ""}`}
+                          onClick={() => setEditingStage(lead.id)}
+                        >
+                          {stageLabels[lead.stage] || lead.stage}
+                        </Badge>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {!lead.opt_out && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-destructive"
+                          title="Marcar como Opt-out"
+                          onClick={() => updateStageMutation.mutate({ id: lead.id, stage: "optout" })}
+                        >
+                          <Ban className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
             </TableBody>
           </Table>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between border-t px-4 py-3">
+              <p className="text-xs text-muted-foreground">
+                Página {page + 1} de {totalPages} ({totalCount} leads)
+              </p>
+              <div className="flex gap-1">
+                <Button variant="outline" size="icon" className="h-8 w-8" disabled={page === 0} onClick={() => setPage(page - 1)}>
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <Button variant="outline" size="icon" className="h-8 w-8" disabled={page >= totalPages - 1} onClick={() => setPage(page + 1)}>
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

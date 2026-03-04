@@ -159,6 +159,270 @@ export type Database = {
           },
         ]
       }
+      leads: {
+        Row: {
+          id: string
+          workspace_id: string
+          name: string | null
+          phone: string | null
+          email: string | null
+          last_purchase: string | null
+          days_inactive: number | null
+          stage: string
+          opt_out: boolean
+          metadata: Json | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          workspace_id: string
+          name?: string | null
+          phone?: string | null
+          email?: string | null
+          last_purchase?: string | null
+          days_inactive?: number | null
+          stage?: string
+          opt_out?: boolean
+          metadata?: Json | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          workspace_id?: string
+          name?: string | null
+          phone?: string | null
+          email?: string | null
+          last_purchase?: string | null
+          days_inactive?: number | null
+          stage?: string
+          opt_out?: boolean
+          metadata?: Json | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "leads_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      imports: {
+        Row: {
+          id: string
+          workspace_id: string
+          filename: string
+          total: number
+          new_leads: number
+          duplicates: number
+          status: string
+          error_message: string | null
+          created_by: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          workspace_id: string
+          filename: string
+          total?: number
+          new_leads?: number
+          duplicates?: number
+          status?: string
+          error_message?: string | null
+          created_by?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          workspace_id?: string
+          filename?: string
+          total?: number
+          new_leads?: number
+          duplicates?: number
+          status?: string
+          error_message?: string | null
+          created_by?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "imports_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      campaigns: {
+        Row: {
+          id: string
+          workspace_id: string
+          name: string
+          status: string
+          message_template: string | null
+          survey_questions: Json | null
+          offer_type: string | null
+          offer_value: string | null
+          offer_rule: string | null
+          target_stages: string[] | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          workspace_id: string
+          name: string
+          status?: string
+          message_template?: string | null
+          survey_questions?: Json | null
+          offer_type?: string | null
+          offer_value?: string | null
+          offer_rule?: string | null
+          target_stages?: string[] | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          workspace_id?: string
+          name?: string
+          status?: string
+          message_template?: string | null
+          survey_questions?: Json | null
+          offer_type?: string | null
+          offer_value?: string | null
+          offer_rule?: string | null
+          target_stages?: string[] | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campaigns_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      dispatches: {
+        Row: {
+          id: string
+          workspace_id: string
+          lead_id: string
+          campaign_id: string | null
+          whatsapp_message_id: string | null
+          status: string
+          sent_at: string | null
+          delivered_at: string | null
+          read_at: string | null
+          replied_at: string | null
+          error_message: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          workspace_id: string
+          lead_id: string
+          campaign_id?: string | null
+          whatsapp_message_id?: string | null
+          status?: string
+          sent_at?: string | null
+          delivered_at?: string | null
+          read_at?: string | null
+          replied_at?: string | null
+          error_message?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          workspace_id?: string
+          lead_id?: string
+          campaign_id?: string | null
+          whatsapp_message_id?: string | null
+          status?: string
+          sent_at?: string | null
+          delivered_at?: string | null
+          read_at?: string | null
+          replied_at?: string | null
+          error_message?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dispatches_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dispatches_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dispatches_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whatsapp_config: {
+        Row: {
+          id: string
+          workspace_id: string
+          phone_number_id: string | null
+          waba_id: string | null
+          access_token: string | null
+          verify_token: string | null
+          webhook_secret: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          workspace_id: string
+          phone_number_id?: string | null
+          waba_id?: string | null
+          access_token?: string | null
+          verify_token?: string | null
+          webhook_secret?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          workspace_id?: string
+          phone_number_id?: string | null
+          waba_id?: string | null
+          access_token?: string | null
+          verify_token?: string | null
+          webhook_secret?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_config_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: true
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -178,6 +442,10 @@ export type Database = {
           _role: Database["public"]["Enums"]["app_role"]
           _user_id: string
         }
+        Returns: boolean
+      }
+      is_workspace_member: {
+        Args: { ws_id: string }
         Returns: boolean
       }
     }

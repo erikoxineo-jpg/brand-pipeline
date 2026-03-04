@@ -8,6 +8,7 @@ import {
   Settings,
   LogOut,
   MessageSquare,
+  BookOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -21,6 +22,7 @@ const navigation = [
   { name: "Pipeline", href: "/pipeline", icon: Kanban },
   { name: "Disparos", href: "/dispatches", icon: MessageSquare },
   { name: "Configurações", href: "/settings", icon: Settings },
+  { name: "Manual", href: "/manual", icon: BookOpen },
 ];
 
 const roleLabels: Record<string, string> = {
