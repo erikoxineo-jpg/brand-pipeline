@@ -641,9 +641,9 @@ const LandingPage = () => {
                   {
                     plan: "Starter — 500 leads",
                     invest: "R$ 97/mês",
-                    reactivated: "170 clientes",
-                    example: "Uma clínica de estética com ticket médio de R$ 250 pode gerar R$ 42.500 em agendamentos reativados.",
-                    roi: "438x o investimento",
+                    reactivated: "90 clientes",
+                    example: "Uma clínica de estética com ticket médio de R$ 250 pode gerar R$ 22.500 em agendamentos reativados.",
+                    roi: "232x o investimento",
                   },
                   {
                     plan: "Professional — 2.000 leads",
@@ -657,7 +657,7 @@ const LandingPage = () => {
                     plan: "Business — 10.000 leads",
                     invest: "R$ 397/mês",
                     reactivated: "3.400 clientes",
-                    example: "Um pet shop com ticket médio de R$ 80 pode faturar R$ 272.000 em vendas de rações e serviços reativados.",
+                    example: "Uma marca de cosméticos com ticket médio de R$ 80 pode faturar R$ 272.000 em vendas reativadas.",
                     roi: "685x o investimento",
                   },
                 ].map((item) => (
