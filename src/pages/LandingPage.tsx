@@ -639,26 +639,26 @@ const LandingPage = () => {
               <motion.div variants={fadeUp} className="space-y-4">
                 {[
                   {
-                    plan: "Plano 1.000 contatos",
-                    invest: "R$ 699 + R$ 99/mês",
-                    reactivated: "340 clientes",
-                    example: "Uma clínica de estética com ticket médio de R$ 250 pode gerar R$ 85.000 em agendamentos reativados.",
-                    roi: "107x o investimento",
+                    plan: "Starter — 500 leads",
+                    invest: "R$ 97/mês",
+                    reactivated: "170 clientes",
+                    example: "Uma clínica de estética com ticket médio de R$ 250 pode gerar R$ 42.500 em agendamentos reativados.",
+                    roi: "438x o investimento",
                   },
                   {
-                    plan: "Plano 5.000 contatos",
-                    invest: "R$ 1.299 + R$ 99/mês",
-                    reactivated: "1.700 clientes",
-                    example: "Uma loja de roupas com ticket médio de R$ 120 pode recuperar R$ 204.000 em vendas recorrentes.",
-                    roi: "146x o investimento",
+                    plan: "Professional — 2.000 leads",
+                    invest: "R$ 197/mês",
+                    reactivated: "680 clientes",
+                    example: "Uma loja de roupas com ticket médio de R$ 120 pode recuperar R$ 81.600 em vendas recorrentes.",
+                    roi: "414x o investimento",
                     highlight: true,
                   },
                   {
-                    plan: "Plano 10.000 contatos",
-                    invest: "R$ 1.999 + R$ 99/mês",
+                    plan: "Business — 10.000 leads",
+                    invest: "R$ 397/mês",
                     reactivated: "3.400 clientes",
                     example: "Um pet shop com ticket médio de R$ 80 pode faturar R$ 272.000 em vendas de rações e serviços reativados.",
-                    roi: "130x o investimento",
+                    roi: "685x o investimento",
                   },
                 ].map((item) => (
                   <Card key={item.plan} className={`border-border/50 transition-shadow hover:shadow-lg ${item.highlight ? "border-primary ring-2 ring-primary/20" : ""}`}>
