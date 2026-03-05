@@ -304,9 +304,10 @@ const Imports = () => {
     } finally {
       setImporting(false);
       queryClient.invalidateQueries({ queryKey: ["imports", workspaceId] });
-      queryClient.invalidateQueries({ queryKey: ["leads"] });
-      queryClient.invalidateQueries({ queryKey: ["pipeline-leads"] });
-      queryClient.invalidateQueries({ queryKey: ["dashboard-leads"] });
+      queryClient.removeQueries({ queryKey: ["leads"] });
+      queryClient.invalidateQueries({ queryKey: ["pipeline-leads"], refetchType: "all" });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-leads"], refetchType: "all" });
+      queryClient.invalidateQueries({ queryKey: ["checklist-leads"], refetchType: "all" });
     }
   };
 
