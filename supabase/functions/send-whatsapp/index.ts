@@ -90,8 +90,8 @@ serve(async (req) => {
       );
     }
 
-    const EVOLUTION_API_URL = Deno.env.get("EVOLUTION_API_URL") || "";
-    const EVOLUTION_API_KEY = Deno.env.get("EVOLUTION_API_KEY") || "";
+    // Evolution API: use public proxy URL (nginx injects apikey automatically)
+    const EVOLUTION_API_URL = Deno.env.get("EVOLUTION_API_URL") || "https://reconnect.oxineo.com.br/api/evolution";
 
     // Get workspace name for {{marca}} variable
     const { data: workspace } = await supabase
@@ -129,15 +129,12 @@ serve(async (req) => {
         let sendError: string | null = null;
 
         if (provider === "evolution") {
-          // Evolution API send
+          // Evolution API send (via nginx proxy that injects apikey)
           const evoResponse = await fetch(
             `${EVOLUTION_API_URL}/message/sendText/${waConfig.evolution_instance_name}`,
             {
               method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                apikey: EVOLUTION_API_KEY,
-              },
+              headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 number: lead.phone.replace(/\D/g, ""),
                 text: message,
@@ -145,12 +142,14 @@ serve(async (req) => {
             }
           );
 
-          const evoResult = await evoResponse.json();
+          const evoText = await evoResponse.text();
+          let evoResult: any;
+          try { evoResult = JSON.parse(evoText); } catch { evoResult = null; }
 
-          if (evoResponse.ok && evoResult.key?.id) {
+          if (evoResponse.ok && evoResult?.key?.id) {
             waMessageId = evoResult.key.id;
           } else {
-            sendError = evoResult.message || evoResult.error || "Evolution API error";
+            sendError = evoResult?.message || evoResult?.error || `Evolution API error (${evoResponse.status}): ${evoText.slice(0, 200)}`;
           }
         } else {
           // Meta Cloud API send

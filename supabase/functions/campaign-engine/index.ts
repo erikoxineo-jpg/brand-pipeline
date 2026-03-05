@@ -14,8 +14,8 @@ serve(async (req) => {
     return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
   }
 
-  const EVOLUTION_API_URL = Deno.env.get("EVOLUTION_API_URL") || "";
-  const EVOLUTION_API_KEY = Deno.env.get("EVOLUTION_API_KEY") || "";
+  // Evolution API: use public proxy URL (nginx injects apikey automatically)
+  const EVOLUTION_API_URL = Deno.env.get("EVOLUTION_API_URL") || "https://reconnect.oxineo.com.br/api/evolution";
 
   const results = {
     dispatches_created: 0,
@@ -172,18 +172,20 @@ serve(async (req) => {
             `${EVOLUTION_API_URL}/message/sendText/${waConfig.evolution_instance_name}`,
             {
               method: "POST",
-              headers: { "Content-Type": "application/json", apikey: EVOLUTION_API_KEY },
+              headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 number: lead.phone.replace(/\D/g, ""),
                 text: message,
               }),
             }
           );
-          const evoResult = await evoResponse.json();
-          if (evoResponse.ok && evoResult.key?.id) {
+          const evoText = await evoResponse.text();
+          let evoResult: any;
+          try { evoResult = JSON.parse(evoText); } catch { evoResult = null; }
+          if (evoResponse.ok && evoResult?.key?.id) {
             waMessageId = evoResult.key.id;
           } else {
-            sendError = evoResult.message || evoResult.error || "Evolution API error";
+            sendError = evoResult?.message || evoResult?.error || `Evolution API error (${evoResponse.status})`;
           }
         } else if (waConfig.phone_number_id && waConfig.access_token) {
           const waResponse = await fetch(
@@ -349,15 +351,17 @@ serve(async (req) => {
             `${EVOLUTION_API_URL}/message/sendText/${waConfig.evolution_instance_name}`,
             {
               method: "POST",
-              headers: { "Content-Type": "application/json", apikey: EVOLUTION_API_KEY },
+              headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 number: lead.phone.replace(/\D/g, ""),
                 text: message,
               }),
             }
           );
-          const evoResult = await evoResponse.json();
-          if (evoResponse.ok && evoResult.key?.id) {
+          const evoText = await evoResponse.text();
+          let evoResult: any;
+          try { evoResult = JSON.parse(evoText); } catch { evoResult = null; }
+          if (evoResponse.ok && evoResult?.key?.id) {
             waMessageId = evoResult.key.id;
           }
         } else if (waConfig.phone_number_id && waConfig.access_token) {

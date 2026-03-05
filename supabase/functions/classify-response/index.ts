@@ -194,8 +194,7 @@ Regras:
         const provider = waConfig.provider || "meta";
         let waMessageId: string | null = null;
 
-        const EVOLUTION_API_URL = Deno.env.get("EVOLUTION_API_URL") || "";
-        const EVOLUTION_API_KEY = Deno.env.get("EVOLUTION_API_KEY") || "";
+        const EVOLUTION_API_URL = Deno.env.get("EVOLUTION_API_URL") || "https://reconnect.oxineo.com.br/api/evolution";
 
         try {
           if (provider === "evolution" && waConfig.evolution_instance_name) {
@@ -203,15 +202,17 @@ Regras:
               `${EVOLUTION_API_URL}/message/sendText/${waConfig.evolution_instance_name}`,
               {
                 method: "POST",
-                headers: { "Content-Type": "application/json", apikey: EVOLUTION_API_KEY },
+                headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                   number: lead.phone.replace(/\D/g, ""),
                   text: classification.suggested_response,
                 }),
               }
             );
-            const evoResult = await evoResponse.json();
-            if (evoResponse.ok && evoResult.key?.id) {
+            const evoText = await evoResponse.text();
+            let evoResult: any;
+            try { evoResult = JSON.parse(evoText); } catch { evoResult = null; }
+            if (evoResponse.ok && evoResult?.key?.id) {
               waMessageId = evoResult.key.id;
             }
           } else if (waConfig.phone_number_id && waConfig.access_token) {
