@@ -20,7 +20,12 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
   const [signUpSuccess, setSignUpSuccess] = useState(false);
 
-  if (session) return <Navigate to="/dashboard" replace />;
+  const searchParams = new URLSearchParams(window.location.search);
+  const planFromUrl = searchParams.get("plan");
+
+  if (session) {
+    return <Navigate to={planFromUrl ? `/?autoCheckout=${planFromUrl}` : "/dashboard"} replace />;
+  }
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,7 +41,7 @@ const Login = () => {
       toast({ title: "Erro ao entrar", description: msg, variant: "destructive" });
     } else {
       toast({ title: "Bem-vindo de volta!", description: "Login realizado com sucesso." });
-      navigate("/dashboard");
+      navigate(planFromUrl ? `/?autoCheckout=${planFromUrl}` : "/dashboard");
     }
   };
 

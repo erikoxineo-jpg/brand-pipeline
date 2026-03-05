@@ -1,8 +1,8 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -128,9 +128,11 @@ const LandingPage = () => {
   const { session } = useAuth();
   const isMobile = useIsMobile();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [activeScreenshot, setActiveScreenshot] = useState(0);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
+  const autoCheckoutTriggered = useRef(false);
 
   const handleCheckout = useCallback(async (planId: string, billingType = "PIX") => {
     setCheckoutLoading(planId);
@@ -156,6 +158,16 @@ const LandingPage = () => {
       setCheckoutLoading(null);
     }
   }, []);
+
+  // Auto-trigger checkout after login redirect
+  useEffect(() => {
+    const autoCheckout = searchParams.get("autoCheckout");
+    if (autoCheckout && session && !autoCheckoutTriggered.current) {
+      autoCheckoutTriggered.current = true;
+      setSearchParams({}, { replace: true });
+      handleCheckout(autoCheckout);
+    }
+  }, [searchParams, session, handleCheckout, setSearchParams]);
 
   return (
     <div className="min-h-screen bg-background">
