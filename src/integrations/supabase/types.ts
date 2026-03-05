@@ -495,6 +495,10 @@ export type Database = {
           access_token: string | null
           verify_token: string | null
           webhook_secret: string | null
+          provider: string
+          evolution_instance_name: string | null
+          evolution_phone: string | null
+          evolution_status: string | null
           created_at: string
           updated_at: string
         }
@@ -506,6 +510,10 @@ export type Database = {
           access_token?: string | null
           verify_token?: string | null
           webhook_secret?: string | null
+          provider?: string
+          evolution_instance_name?: string | null
+          evolution_phone?: string | null
+          evolution_status?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -517,6 +525,10 @@ export type Database = {
           access_token?: string | null
           verify_token?: string | null
           webhook_secret?: string | null
+          provider?: string
+          evolution_instance_name?: string | null
+          evolution_phone?: string | null
+          evolution_status?: string | null
           created_at?: string
           updated_at?: string
         }

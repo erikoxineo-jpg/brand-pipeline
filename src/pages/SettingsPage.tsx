@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,7 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
 } from "@/components/ui/dialog";
-import { Building2, Users, Plus, Pencil, Trash2, Loader2, Wifi, CreditCard, ExternalLink } from "lucide-react";
+import { Building2, Users, Plus, Pencil, Trash2, Loader2, Wifi, CreditCard, ExternalLink, QrCode, Code, AlertTriangle, CheckCircle2, XCircle, RefreshCw, Smartphone } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -50,10 +50,19 @@ const SettingsPage = () => {
   const [brandName, setBrandName] = useState("");
 
   // WhatsApp config state
+  const [waProvider, setWaProvider] = useState<"evolution" | "meta">("evolution");
   const [waPhoneNumberId, setWaPhoneNumberId] = useState("");
   const [waWabaId, setWaWabaId] = useState("");
   const [waAccessToken, setWaAccessToken] = useState("");
   const [waVerifyToken, setWaVerifyToken] = useState("");
+
+  // Evolution API state
+  const [evolutionInstanceName, setEvolutionInstanceName] = useState("");
+  const [evolutionStatus, setEvolutionStatus] = useState("close");
+  const [evolutionPhone, setEvolutionPhone] = useState("");
+  const [qrCode, setQrCode] = useState<string | null>(null);
+  const [isConnecting, setIsConnecting] = useState(false);
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Invite dialog
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -93,8 +102,152 @@ const SettingsPage = () => {
       setWaWabaId(waConfig.waba_id || "");
       setWaAccessToken(waConfig.access_token || "");
       setWaVerifyToken(waConfig.verify_token || "");
+      setWaProvider((waConfig.provider as "evolution" | "meta") || "evolution");
+      setEvolutionInstanceName(waConfig.evolution_instance_name || "");
+      setEvolutionStatus(waConfig.evolution_status || "close");
+      setEvolutionPhone(waConfig.evolution_phone || "");
     }
   }, [waConfig]);
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      if (pollingRef.current) clearInterval(pollingRef.current);
+    };
+  }, []);
+
+  // Evolution API helpers
+  const EVOLUTION_BASE = "/api/evolution";
+
+  const generateInstanceName = useCallback(() => {
+    if (!workspaceId) return "";
+    return `rc_${workspaceId.replace(/-/g, "").slice(0, 12)}`;
+  }, [workspaceId]);
+
+  const connectEvolution = async () => {
+    if (!workspaceId) return;
+    setIsConnecting(true);
+    setQrCode(null);
+
+    const instanceName = generateInstanceName();
+    setEvolutionInstanceName(instanceName);
+
+    try {
+      // Create instance (or connect existing)
+      const createRes = await fetch(`${EVOLUTION_BASE}/instance/create`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          instanceName,
+          integration: "WHATSAPP-BAILEYS",
+          qrcode: true,
+        }),
+      });
+
+      const createData = await createRes.json();
+
+      if (createData.qrcode?.base64) {
+        setQrCode(createData.qrcode.base64);
+      } else if (createData.instance?.status === "open") {
+        // Already connected
+        setEvolutionStatus("open");
+        setIsConnecting(false);
+        await saveEvolutionConfig(instanceName, "open", createData.instance?.owner || "");
+        return;
+      }
+
+      // Start polling for connection state
+      startPolling(instanceName);
+    } catch (err: any) {
+      toast.error("Erro ao conectar: " + err.message);
+      setIsConnecting(false);
+    }
+  };
+
+  const startPolling = (instanceName: string) => {
+    if (pollingRef.current) clearInterval(pollingRef.current);
+
+    pollingRef.current = setInterval(async () => {
+      try {
+        const res = await fetch(`${EVOLUTION_BASE}/instance/connectionState/${instanceName}`);
+        const data = await res.json();
+        const state = data.instance?.state || data.state;
+
+        if (state === "open") {
+          clearInterval(pollingRef.current!);
+          pollingRef.current = null;
+          setEvolutionStatus("open");
+          setQrCode(null);
+          setIsConnecting(false);
+
+          // Fetch instance info to get phone number
+          const infoRes = await fetch(`${EVOLUTION_BASE}/instance/fetchInstances?instanceName=${instanceName}`);
+          const infoData = await infoRes.json();
+          const phone = infoData?.[0]?.instance?.owner || "";
+          setEvolutionPhone(phone);
+
+          await saveEvolutionConfig(instanceName, "open", phone);
+          toast.success("WhatsApp conectado!");
+        }
+      } catch {
+        // Silently retry
+      }
+    }, 3000);
+  };
+
+  const saveEvolutionConfig = async (instanceName: string, status: string, phone: string) => {
+    if (!workspaceId) return;
+    const { error } = await supabase
+      .from("whatsapp_config")
+      .upsert({
+        workspace_id: workspaceId,
+        provider: "evolution",
+        evolution_instance_name: instanceName,
+        evolution_status: status,
+        evolution_phone: phone,
+      }, { onConflict: "workspace_id" });
+    if (error) console.error("Error saving evolution config:", error);
+    queryClient.invalidateQueries({ queryKey: ["whatsapp-config"] });
+  };
+
+  const disconnectEvolution = async () => {
+    if (!evolutionInstanceName) return;
+    try {
+      await fetch(`${EVOLUTION_BASE}/instance/logout/${evolutionInstanceName}`, { method: "DELETE" });
+      setEvolutionStatus("close");
+      setEvolutionPhone("");
+      setQrCode(null);
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+      await saveEvolutionConfig(evolutionInstanceName, "close", "");
+      toast.success("WhatsApp desconectado");
+    } catch (err: any) {
+      toast.error("Erro ao desconectar: " + err.message);
+    }
+  };
+
+  const reconnectEvolution = async () => {
+    if (!evolutionInstanceName) return;
+    setIsConnecting(true);
+    setQrCode(null);
+    try {
+      const res = await fetch(`${EVOLUTION_BASE}/instance/connect/${evolutionInstanceName}`);
+      const data = await res.json();
+      if (data.base64) {
+        setQrCode(data.base64);
+        setEvolutionStatus("close");
+        startPolling(evolutionInstanceName);
+      } else {
+        setIsConnecting(false);
+        toast.info("Instância já conectada ou erro ao reconectar");
+      }
+    } catch (err: any) {
+      setIsConnecting(false);
+      toast.error("Erro ao reconectar: " + err.message);
+    }
+  };
 
   // Load workspace members
   const { data: members = [] } = useQuery({
@@ -161,12 +314,13 @@ const SettingsPage = () => {
     onError: (err: any) => toast.error(err.message),
   });
 
-  // Save WhatsApp config
+  // Save WhatsApp config (Meta Cloud API)
   const saveWhatsAppMutation = useMutation({
     mutationFn: async () => {
       if (!workspaceId) throw new Error("No workspace");
       const configData = {
         workspace_id: workspaceId,
+        provider: "meta" as const,
         phone_number_id: waPhoneNumberId || null,
         waba_id: waWabaId || null,
         access_token: waAccessToken || null,
@@ -315,62 +469,188 @@ const SettingsPage = () => {
 
         {/* WhatsApp Tab */}
         <TabsContent value="whatsapp" className="space-y-4 pt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">WhatsApp Cloud API</CardTitle>
-              <CardDescription>
-                Configure a integração com a API do WhatsApp Business
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Phone Number ID</Label>
-                  <Input
-                    value={waPhoneNumberId}
-                    onChange={(e) => setWaPhoneNumberId(e.target.value)}
-                    placeholder="Ex: 123456789012345"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>WABA ID</Label>
-                  <Input
-                    value={waWabaId}
-                    onChange={(e) => setWaWabaId(e.target.value)}
-                    placeholder="WhatsApp Business Account ID"
-                  />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label>Access Token</Label>
-                <Input
-                  type="password"
-                  value={waAccessToken}
-                  onChange={(e) => setWaAccessToken(e.target.value)}
-                  placeholder="Token permanente do WhatsApp Business"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Verify Token (para webhook)</Label>
-                <Input
-                  value={waVerifyToken}
-                  onChange={(e) => setWaVerifyToken(e.target.value)}
-                  placeholder="Token customizado para verificação do webhook"
-                />
-                <p className="text-xs text-muted-foreground">
-                  URL do webhook: {`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/whatsapp-webhook`}
-                </p>
-              </div>
-              <Button
-                size="sm"
-                onClick={() => saveWhatsAppMutation.mutate()}
-                disabled={saveWhatsAppMutation.isPending}
-              >
-                {saveWhatsAppMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Salvar Configuração WhatsApp
-              </Button>
-            </CardContent>
-          </Card>
+          <Tabs defaultValue="qrcode">
+            <TabsList className="mb-4">
+              <TabsTrigger value="qrcode" className="gap-2">
+                <QrCode className="h-4 w-4" />
+                QR Code (Recomendado)
+              </TabsTrigger>
+              <TabsTrigger value="meta-api" className="gap-2">
+                <Code className="h-4 w-4" />
+                API Oficial (Avançado)
+              </TabsTrigger>
+            </TabsList>
+
+            {/* QR Code / Evolution API sub-tab */}
+            <TabsContent value="qrcode">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Conectar WhatsApp via QR Code</CardTitle>
+                  <CardDescription>
+                    Escaneie o QR code com seu WhatsApp para conectar. Sem configuração técnica.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  {evolutionStatus === "open" && waProvider === "evolution" ? (
+                    /* Connected state */
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-3 rounded-lg border border-green-200 bg-green-50 p-4 dark:border-green-900 dark:bg-green-950/30">
+                        <CheckCircle2 className="h-6 w-6 text-green-600 shrink-0" />
+                        <div className="flex-1">
+                          <p className="font-medium text-green-800 dark:text-green-200">WhatsApp Conectado</p>
+                          {evolutionPhone && (
+                            <p className="text-sm text-green-600 dark:text-green-400 flex items-center gap-1.5 mt-0.5">
+                              <Smartphone className="h-3.5 w-3.5" />
+                              {evolutionPhone}
+                            </p>
+                          )}
+                        </div>
+                        <Badge className="bg-green-600 text-white">Ativo</Badge>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={disconnectEvolution}
+                        >
+                          <XCircle className="mr-2 h-4 w-4" />
+                          Desconectar
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={reconnectEvolution}
+                          disabled={isConnecting}
+                        >
+                          <RefreshCw className={`mr-2 h-4 w-4 ${isConnecting ? "animate-spin" : ""}`} />
+                          Reconectar
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    /* Disconnected state */
+                    <div className="space-y-4">
+                      {!qrCode && !isConnecting && (
+                        <div className="flex flex-col items-center gap-4 rounded-lg border-2 border-dashed p-8">
+                          <div className="rounded-full bg-muted p-4">
+                            <QrCode className="h-10 w-10 text-muted-foreground" />
+                          </div>
+                          <div className="text-center">
+                            <p className="font-medium">WhatsApp não conectado</p>
+                            <p className="text-sm text-muted-foreground mt-1">
+                              Clique abaixo para gerar um QR code e conectar seu WhatsApp
+                            </p>
+                          </div>
+                          <Button onClick={connectEvolution}>
+                            <Smartphone className="mr-2 h-4 w-4" />
+                            Conectar WhatsApp
+                          </Button>
+                        </div>
+                      )}
+
+                      {(qrCode || isConnecting) && (
+                        <div className="flex flex-col items-center gap-4 py-4">
+                          {qrCode ? (
+                            <>
+                              <p className="text-sm font-medium">Escaneie o QR code com seu WhatsApp</p>
+                              <div className="rounded-lg border p-2 bg-white">
+                                <img
+                                  src={qrCode}
+                                  alt="QR Code WhatsApp"
+                                  width={264}
+                                  height={264}
+                                  className="block"
+                                />
+                              </div>
+                              <p className="text-xs text-muted-foreground">
+                                Abra o WhatsApp → Menu → Dispositivos conectados → Conectar dispositivo
+                              </p>
+                            </>
+                          ) : (
+                            <div className="flex items-center gap-2 text-muted-foreground">
+                              <Loader2 className="h-5 w-5 animate-spin" />
+                              <span>Gerando QR code...</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* Meta Cloud API sub-tab */}
+            <TabsContent value="meta-api">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">WhatsApp Cloud API (Meta)</CardTitle>
+                  <CardDescription>
+                    Integração via API oficial do Meta Business Platform
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex items-start gap-3 rounded-lg border border-yellow-200 bg-yellow-50 p-4 dark:border-yellow-900 dark:bg-yellow-950/30">
+                    <AlertTriangle className="h-5 w-5 text-yellow-600 shrink-0 mt-0.5" />
+                    <div className="text-sm text-yellow-800 dark:text-yellow-200">
+                      <p className="font-medium">Configuração avançada</p>
+                      <p className="mt-1">
+                        Requer conta Meta Business verificada, app no Meta Developers e número de telefone
+                        dedicado. Para a maioria dos usuários, recomendamos usar a conexão via QR Code.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Phone Number ID</Label>
+                      <Input
+                        value={waPhoneNumberId}
+                        onChange={(e) => setWaPhoneNumberId(e.target.value)}
+                        placeholder="Ex: 123456789012345"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>WABA ID</Label>
+                      <Input
+                        value={waWabaId}
+                        onChange={(e) => setWaWabaId(e.target.value)}
+                        placeholder="WhatsApp Business Account ID"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Access Token</Label>
+                    <Input
+                      type="password"
+                      value={waAccessToken}
+                      onChange={(e) => setWaAccessToken(e.target.value)}
+                      placeholder="Token permanente do WhatsApp Business"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Verify Token (para webhook)</Label>
+                    <Input
+                      value={waVerifyToken}
+                      onChange={(e) => setWaVerifyToken(e.target.value)}
+                      placeholder="Token customizado para verificação do webhook"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      URL do webhook: {`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/whatsapp-webhook`}
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    onClick={() => saveWhatsAppMutation.mutate()}
+                    disabled={saveWhatsAppMutation.isPending}
+                  >
+                    {saveWhatsAppMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Salvar Configuração Meta API
+                  </Button>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
         </TabsContent>
 
         {/* Billing Tab */}

@@ -67,12 +67,31 @@ serve(async (req) => {
       .eq("workspace_id", workspaceId)
       .single();
 
-    if (configErr || !waConfig?.phone_number_id || !waConfig?.access_token) {
+    const provider = waConfig?.provider || "meta";
+
+    if (provider === "meta" && (!waConfig?.phone_number_id || !waConfig?.access_token)) {
       return new Response(
         JSON.stringify({ error: "WhatsApp not configured for this workspace" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    if (provider === "evolution" && !waConfig?.evolution_instance_name) {
+      return new Response(
+        JSON.stringify({ error: "WhatsApp Evolution API not configured for this workspace" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (configErr) {
+      return new Response(
+        JSON.stringify({ error: "WhatsApp not configured for this workspace" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const EVOLUTION_API_URL = Deno.env.get("EVOLUTION_API_URL") || "";
+    const EVOLUTION_API_KEY = Deno.env.get("EVOLUTION_API_KEY") || "";
 
     // Get workspace name for {{marca}} variable
     const { data: workspace } = await supabase
@@ -106,32 +125,68 @@ serve(async (req) => {
       message = message.replace(/\{\{marca\}\}/g, brandName);
 
       try {
-        const waResponse = await fetch(
-          `https://graph.facebook.com/v21.0/${waConfig.phone_number_id}/messages`,
-          {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${waConfig.access_token}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              messaging_product: "whatsapp",
-              to: lead.phone.replace(/\D/g, ""),
-              type: "text",
-              text: { body: message },
-            }),
+        let waMessageId: string | null = null;
+        let sendError: string | null = null;
+
+        if (provider === "evolution") {
+          // Evolution API send
+          const evoResponse = await fetch(
+            `${EVOLUTION_API_URL}/message/sendText/${waConfig.evolution_instance_name}`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                apikey: EVOLUTION_API_KEY,
+              },
+              body: JSON.stringify({
+                number: lead.phone.replace(/\D/g, ""),
+                text: message,
+              }),
+            }
+          );
+
+          const evoResult = await evoResponse.json();
+
+          if (evoResponse.ok && evoResult.key?.id) {
+            waMessageId = evoResult.key.id;
+          } else {
+            sendError = evoResult.message || evoResult.error || "Evolution API error";
           }
-        );
+        } else {
+          // Meta Cloud API send
+          const waResponse = await fetch(
+            `https://graph.facebook.com/v21.0/${waConfig.phone_number_id}/messages`,
+            {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${waConfig.access_token}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                messaging_product: "whatsapp",
+                to: lead.phone.replace(/\D/g, ""),
+                type: "text",
+                text: { body: message },
+              }),
+            }
+          );
 
-        const waResult = await waResponse.json();
+          const waResult = await waResponse.json();
 
-        if (waResponse.ok && waResult.messages?.[0]?.id) {
+          if (waResponse.ok && waResult.messages?.[0]?.id) {
+            waMessageId = waResult.messages[0].id;
+          } else {
+            sendError = waResult.error?.message || "WhatsApp API error";
+          }
+        }
+
+        if (waMessageId) {
           await supabase
             .from("dispatches")
             .update({
               status: "sent",
               sent_at: new Date().toISOString(),
-              whatsapp_message_id: waResult.messages[0].id,
+              whatsapp_message_id: waMessageId,
             })
             .eq("id", dispatch.id);
 
@@ -144,12 +199,11 @@ serve(async (req) => {
 
           results.push({ id: dispatch.id, status: "sent" });
         } else {
-          const errorMsg = waResult.error?.message || "WhatsApp API error";
           await supabase
             .from("dispatches")
-            .update({ status: "failed", error_message: errorMsg })
+            .update({ status: "failed", error_message: sendError })
             .eq("id", dispatch.id);
-          results.push({ id: dispatch.id, status: "failed", error: errorMsg });
+          results.push({ id: dispatch.id, status: "failed", error: sendError || "Unknown error" });
         }
       } catch (sendErr: any) {
         await supabase
