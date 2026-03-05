@@ -17,23 +17,20 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    // Verify auth
+    // Verify auth: accept user JWT or service role key
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: "No auth header" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const { data: { user }, error: authError } = await supabase.auth.getUser(
-      authHeader.replace("Bearer ", "")
-    );
-    if (authError || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    if (authHeader) {
+      const token = authHeader.replace("Bearer ", "");
+      // Skip validation if it's the service role key
+      if (token !== Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")) {
+        const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+        if (authError || !user) {
+          return new Response(JSON.stringify({ error: "Unauthorized", detail: authError?.message }), {
+            status: 401,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+      }
     }
 
     const { dispatch_ids } = await req.json();
@@ -90,8 +87,9 @@ serve(async (req) => {
       );
     }
 
-    // Evolution API: use public proxy URL (nginx injects apikey automatically)
+    // Evolution API config
     const EVOLUTION_API_URL = Deno.env.get("EVOLUTION_API_URL") || "https://reconnect.oxineo.com.br/api/evolution";
+    const EVOLUTION_API_KEY = Deno.env.get("EVOLUTION_API_KEY") || "";
 
     // Get workspace name for {{marca}} variable
     const { data: workspace } = await supabase
@@ -129,12 +127,14 @@ serve(async (req) => {
         let sendError: string | null = null;
 
         if (provider === "evolution") {
-          // Evolution API send (via nginx proxy that injects apikey)
+          // Evolution API send
+          const evoHeaders: Record<string, string> = { "Content-Type": "application/json" };
+          if (EVOLUTION_API_KEY) evoHeaders["apikey"] = EVOLUTION_API_KEY;
           const evoResponse = await fetch(
             `${EVOLUTION_API_URL}/message/sendText/${waConfig.evolution_instance_name}`,
             {
               method: "POST",
-              headers: { "Content-Type": "application/json" },
+              headers: evoHeaders,
               body: JSON.stringify({
                 number: lead.phone.replace(/\D/g, ""),
                 text: message,

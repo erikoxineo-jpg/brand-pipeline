@@ -195,14 +195,17 @@ Regras:
         let waMessageId: string | null = null;
 
         const EVOLUTION_API_URL = Deno.env.get("EVOLUTION_API_URL") || "https://reconnect.oxineo.com.br/api/evolution";
+        const EVOLUTION_API_KEY = Deno.env.get("EVOLUTION_API_KEY") || "";
 
         try {
           if (provider === "evolution" && waConfig.evolution_instance_name) {
+            const evoHeaders: Record<string, string> = { "Content-Type": "application/json" };
+            if (EVOLUTION_API_KEY) evoHeaders["apikey"] = EVOLUTION_API_KEY;
             const evoResponse = await fetch(
               `${EVOLUTION_API_URL}/message/sendText/${waConfig.evolution_instance_name}`,
               {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: evoHeaders,
                 body: JSON.stringify({
                   number: lead.phone.replace(/\D/g, ""),
                   text: classification.suggested_response,

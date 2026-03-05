@@ -14,8 +14,9 @@ serve(async (req) => {
     return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
   }
 
-  // Evolution API: use public proxy URL (nginx injects apikey automatically)
+  // Evolution API config
   const EVOLUTION_API_URL = Deno.env.get("EVOLUTION_API_URL") || "https://reconnect.oxineo.com.br/api/evolution";
+  const EVOLUTION_API_KEY = Deno.env.get("EVOLUTION_API_KEY") || "";
 
   const results = {
     dispatches_created: 0,
@@ -172,7 +173,7 @@ serve(async (req) => {
             `${EVOLUTION_API_URL}/message/sendText/${waConfig.evolution_instance_name}`,
             {
               method: "POST",
-              headers: { "Content-Type": "application/json" },
+              headers: EVOLUTION_API_KEY ? { "Content-Type": "application/json", apikey: EVOLUTION_API_KEY } : { "Content-Type": "application/json" },
               body: JSON.stringify({
                 number: lead.phone.replace(/\D/g, ""),
                 text: message,
@@ -351,7 +352,7 @@ serve(async (req) => {
             `${EVOLUTION_API_URL}/message/sendText/${waConfig.evolution_instance_name}`,
             {
               method: "POST",
-              headers: { "Content-Type": "application/json" },
+              headers: EVOLUTION_API_KEY ? { "Content-Type": "application/json", apikey: EVOLUTION_API_KEY } : { "Content-Type": "application/json" },
               body: JSON.stringify({
                 number: lead.phone.replace(/\D/g, ""),
                 text: message,
