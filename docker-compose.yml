@@ -36,6 +36,10 @@ services:
       - DATABASE_SAVE_DATA_INSTANCE=true
       - DATABASE_SAVE_DATA_NEW_MESSAGE=true
       - DATABASE_SAVE_DATA_CONTACTS=true
+      - CACHE_REDIS_ENABLED=false
+      - CACHE_REDIS_URI=
+      - CACHE_REDIS_PREFIX_KEY=
+      - CACHE_LOCAL_ENABLED=true
     volumes:
       - evolution-instances:/evolution/instances
     depends_on:
