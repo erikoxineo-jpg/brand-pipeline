@@ -114,14 +114,45 @@ const Imports = () => {
       setRawRows(json.slice(1, 6)); // preview first 5 rows
 
       // Auto-guess mappings
-      const guessed: FieldMapping[] = hdrs.map((h) => {
+      const firstRow = json[1] || [];
+      const guessed: FieldMapping[] = hdrs.map((h, colIdx) => {
         const lower = h.toLowerCase().trim();
-        if (lower.includes("nome") || lower.includes("name") || lower === "cliente" || lower === "client" || lower === "razão social" || lower === "razao social" || lower === "contato") return "name";
-        if (lower.includes("tel") || lower.includes("phone") || lower.includes("cel") || lower.includes("whats") || lower === "mobile" || lower === "fone" || lower === "número" || lower === "numero") return "phone";
+        if (lower.includes("nome") || lower.includes("name") || lower === "cliente" || lower === "client" || lower === "razão social" || lower === "razao social" || lower === "contato" || lower === "pessoa" || lower === "responsavel" || lower === "responsável") return "name";
+        if (lower.includes("tel") || lower.includes("phone") || lower.includes("cel") || lower.includes("whats") || lower === "mobile" || lower === "fone" || lower === "número" || lower === "numero" || lower === "ddd + telefone") return "phone";
         if (lower.includes("email") || lower.includes("e-mail")) return "email";
         if (lower.includes("compra") || lower.includes("purchase") || lower.includes("data") || lower.includes("date") || lower.includes("última") || lower.includes("ultima")) return "last_purchase";
         return "ignore";
       });
+
+      // Fallback: if no column matched "name", find first text-looking column
+      if (!guessed.includes("name")) {
+        for (let i = 0; i < hdrs.length; i++) {
+          if (guessed[i] !== "ignore") continue;
+          const sample = String(firstRow[i] || "").trim();
+          // Skip if it looks like a number, phone, email, or date
+          if (!sample) continue;
+          if (/^\d+$/.test(sample.replace(/\D/g, "")) && sample.replace(/\D/g, "").length >= 10) continue; // phone
+          if (sample.includes("@")) continue; // email
+          if (/^\d{4}-\d{2}-\d{2}/.test(sample) || /^\d{1,2}\/\d{1,2}\/\d{4}/.test(sample)) continue; // date
+          if (/^\d+([.,]\d+)?$/.test(sample)) continue; // pure number
+          // Looks like a name
+          guessed[i] = "name";
+          break;
+        }
+      }
+
+      // Fallback: if no column matched "phone", find first phone-looking column
+      if (!guessed.includes("phone")) {
+        for (let i = 0; i < hdrs.length; i++) {
+          if (guessed[i] !== "ignore") continue;
+          const sample = String(firstRow[i] || "").replace(/\D/g, "");
+          if (sample.length >= 10 && sample.length <= 13) {
+            guessed[i] = "phone";
+            break;
+          }
+        }
+      }
+
       setMappings(guessed);
 
       // Store all rows for import
