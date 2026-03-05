@@ -133,7 +133,13 @@ const SettingsPage = () => {
     setEvolutionInstanceName(instanceName);
 
     try {
-      // Create instance (or connect existing)
+      // Delete any existing stuck instance first
+      await fetch(`${EVOLUTION_BASE}/instance/delete/${instanceName}`, { method: "DELETE" }).catch(() => {});
+
+      // Small delay to let the server clean up
+      await new Promise((r) => setTimeout(r, 1000));
+
+      // Create fresh instance with QR code
       const createRes = await fetch(`${EVOLUTION_BASE}/instance/create`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -154,6 +160,14 @@ const SettingsPage = () => {
         setIsConnecting(false);
         await saveEvolutionConfig(instanceName, "open", createData.instance?.owner || "");
         return;
+      } else {
+        // QR not in create response, try /connect endpoint
+        await new Promise((r) => setTimeout(r, 2000));
+        const connectRes = await fetch(`${EVOLUTION_BASE}/instance/connect/${instanceName}`);
+        const connectData = await connectRes.json();
+        if (connectData.base64) {
+          setQrCode(connectData.base64);
+        }
       }
 
       // Start polling for connection state
@@ -167,7 +181,22 @@ const SettingsPage = () => {
   const startPolling = (instanceName: string) => {
     if (pollingRef.current) clearInterval(pollingRef.current);
 
+    let attempts = 0;
+    const maxAttempts = 20; // ~60s timeout (20 * 3s)
+
     pollingRef.current = setInterval(async () => {
+      attempts++;
+
+      // Timeout — stop polling and let user retry
+      if (attempts >= maxAttempts) {
+        clearInterval(pollingRef.current!);
+        pollingRef.current = null;
+        setQrCode(null);
+        setIsConnecting(false);
+        toast.error("QR code expirou. Clique em 'Conectar WhatsApp' para tentar novamente.");
+        return;
+      }
+
       try {
         const res = await fetch(`${EVOLUTION_BASE}/instance/connectionState/${instanceName}`);
         const data = await res.json();
@@ -183,7 +212,7 @@ const SettingsPage = () => {
           // Fetch instance info to get phone number
           const infoRes = await fetch(`${EVOLUTION_BASE}/instance/fetchInstances?instanceName=${instanceName}`);
           const infoData = await infoRes.json();
-          const phone = infoData?.[0]?.instance?.owner || "";
+          const phone = infoData?.[0]?.ownerJid || infoData?.[0]?.instance?.owner || "";
           setEvolutionPhone(phone);
 
           await saveEvolutionConfig(instanceName, "open", phone);
