@@ -11,7 +11,7 @@ const ASAAS_API_URL = "https://api.asaas.com/v3";
 
 interface PlanConfig {
   name: string;
-  value: number; // cents → R$
+  value: number;
   maxLeads: number;
   maxMessages: number;
   maxUsers: number;
@@ -61,21 +61,22 @@ async function asaasFetch(path: string, options: RequestInit = {}) {
   return data;
 }
 
-async function findOrCreateCustomer(email: string, name: string): Promise<string> {
-  // Search existing customer by email
+async function findOrCreateCustomer(email: string, name: string, cpfCnpj?: string): Promise<string> {
   const search = await asaasFetch(`/customers?email=${encodeURIComponent(email)}`);
   if (search.data?.length > 0) {
     return search.data[0].id;
   }
 
-  // Create new customer
+  const body: Record<string, unknown> = {
+    name: name || email.split("@")[0],
+    email,
+    notificationDisabled: false,
+  };
+  if (cpfCnpj) body.cpfCnpj = cpfCnpj;
+
   const customer = await asaasFetch("/customers", {
     method: "POST",
-    body: JSON.stringify({
-      name: name || email.split("@")[0],
-      email,
-      notificationDisabled: false,
-    }),
+    body: JSON.stringify(body),
   });
 
   return customer.id;
@@ -93,7 +94,13 @@ serve(async (req) => {
   );
 
   try {
-    const { planId, billingType } = await req.json();
+    const {
+      planId,
+      billingType,
+      creditCard,
+      creditCardHolderInfo,
+    } = await req.json();
+
     const plan = plans[planId];
     if (!plan) throw new Error(`Invalid plan: ${planId}. Valid: starter, professional, business`);
 
@@ -128,39 +135,95 @@ serve(async (req) => {
 
     const displayName = profile?.display_name || user.email.split("@")[0];
 
-    // Find or create Asaas customer
-    const asaasCustomerId = await findOrCreateCustomer(user.email, displayName);
+    // Find or create Asaas customer (pass CPF if available from card form)
+    const cpfCnpj = creditCardHolderInfo?.cpfCnpj;
+    const asaasCustomerId = await findOrCreateCustomer(user.email, displayName, cpfCnpj);
 
-    // Create subscription in Asaas
-    const nextDueDate = new Date();
-    nextDueDate.setDate(nextDueDate.getDate() + 1); // First charge tomorrow
-    const dueDateStr = nextDueDate.toISOString().split("T")[0];
+    const periodStart = new Date();
+    const periodEnd = new Date();
+    periodEnd.setMonth(periodEnd.getMonth() + 1);
 
-    const subscription = await asaasFetch("/subscriptions", {
+    // ─── CREDIT CARD: create subscription with inline card data ───
+    if (effectiveBillingType === "CREDIT_CARD") {
+      if (!creditCard || !creditCardHolderInfo) {
+        throw new Error("Dados do cartão obrigatórios para pagamento com cartão");
+      }
+
+      const nextDueDate = new Date().toISOString().split("T")[0]; // charge today
+
+      const subscription = await asaasFetch("/subscriptions", {
+        method: "POST",
+        body: JSON.stringify({
+          customer: asaasCustomerId,
+          billingType: "CREDIT_CARD",
+          value: plan.value,
+          nextDueDate,
+          cycle: "MONTHLY",
+          description: `ReConnect CRM - Plano ${plan.name}`,
+          externalReference: workspaceId,
+          creditCard: {
+            holderName: creditCard.holderName,
+            number: creditCard.number,
+            expiryMonth: creditCard.expiryMonth,
+            expiryYear: creditCard.expiryYear,
+            ccv: creditCard.ccv,
+          },
+          creditCardHolderInfo: {
+            name: creditCardHolderInfo.name,
+            cpfCnpj: creditCardHolderInfo.cpfCnpj,
+            email: creditCardHolderInfo.email,
+            phone: creditCardHolderInfo.phone,
+            postalCode: creditCardHolderInfo.postalCode,
+            addressNumber: creditCardHolderInfo.addressNumber,
+          },
+        }),
+      });
+
+      await supabaseClient.from("subscriptions").upsert(
+        {
+          workspace_id: workspaceId,
+          asaas_customer_id: asaasCustomerId,
+          asaas_subscription_id: subscription.id,
+          plan: planId,
+          status: "active",
+          billing_type: "CREDIT_CARD",
+          current_period_start: periodStart.toISOString(),
+          current_period_end: periodEnd.toISOString(),
+        },
+        { onConflict: "workspace_id" }
+      );
+
+      return new Response(
+        JSON.stringify({ success: true, subscriptionId: subscription.id }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
+      );
+    }
+
+    // ─── PIX / BOLETO: create single payment, then local subscription ───
+    const dueDate = new Date();
+    dueDate.setDate(dueDate.getDate() + (effectiveBillingType === "BOLETO" ? 3 : 1));
+    const dueDateStr = dueDate.toISOString().split("T")[0];
+
+    const payment = await asaasFetch("/payments", {
       method: "POST",
       body: JSON.stringify({
         customer: asaasCustomerId,
         billingType: effectiveBillingType,
         value: plan.value,
-        nextDueDate: dueDateStr,
-        cycle: "MONTHLY",
-        description: `ReConnect CRM - Plano ${plan.name}`,
+        dueDate: dueDateStr,
+        description: `ReConnect CRM - Plano ${plan.name} (primeira cobrança)`,
         externalReference: workspaceId,
       }),
     });
 
-    // Save subscription locally
-    const periodStart = new Date();
-    const periodEnd = new Date();
-    periodEnd.setMonth(periodEnd.getMonth() + 1);
-
+    // Save subscription locally with pending status (webhook will activate)
     await supabaseClient.from("subscriptions").upsert(
       {
         workspace_id: workspaceId,
         asaas_customer_id: asaasCustomerId,
-        asaas_subscription_id: subscription.id,
+        asaas_subscription_id: payment.id, // payment ID until subscription is created
         plan: planId,
-        status: "active",
+        status: "pending",
         billing_type: effectiveBillingType,
         current_period_start: periodStart.toISOString(),
         current_period_end: periodEnd.toISOString(),
@@ -168,15 +231,28 @@ serve(async (req) => {
       { onConflict: "workspace_id" }
     );
 
-    // Build payment link URL
-    // Asaas returns invoiceUrl on the first payment of the subscription
-    const paymentUrl = subscription.paymentLink
-      || `https://www.asaas.com/c/${subscription.id}`;
+    if (effectiveBillingType === "PIX") {
+      // Fetch PIX QR code
+      const pixData = await asaasFetch(`/payments/${payment.id}/pixQrCode`);
 
-    return new Response(JSON.stringify({ url: paymentUrl, subscriptionId: subscription.id }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-      status: 200,
-    });
+      return new Response(
+        JSON.stringify({
+          pixQrCode: pixData.encodedImage,
+          pixCode: pixData.payload,
+          paymentId: payment.id,
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
+      );
+    }
+
+    // BOLETO
+    return new Response(
+      JSON.stringify({
+        bankSlipUrl: payment.bankSlipUrl,
+        paymentId: payment.id,
+      }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
+    );
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
     console.error("create-checkout error:", msg);

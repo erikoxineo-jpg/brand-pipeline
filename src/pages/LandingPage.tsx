@@ -34,6 +34,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import { CheckoutDialog } from "@/components/CheckoutDialog";
 import heroBg from "@/assets/hero-bg.jpg";
 import screenshotDashboard from "@/assets/screenshot-dashboard.png";
 import screenshotLeads from "@/assets/screenshot-leads.png";
@@ -131,31 +132,25 @@ const LandingPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [activeScreenshot, setActiveScreenshot] = useState(0);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
+  const [checkoutPlan, setCheckoutPlan] = useState<{ planId: string; name: string; price: string } | null>(null);
   const autoCheckoutTriggered = useRef(false);
 
-  const handleCheckout = useCallback(async (planId: string, billingType = "PIX") => {
-    setCheckoutLoading(planId);
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        window.location.href = `/login?plan=${planId}`;
-        return;
-      }
+  const planPrices: Record<string, { name: string; price: string }> = {
+    starter: { name: "Starter", price: "R$97" },
+    professional: { name: "Professional", price: "R$197" },
+    business: { name: "Business", price: "R$397" },
+  };
 
-      const { data, error } = await supabase.functions.invoke("create-checkout", {
-        body: { planId, billingType },
-      });
+  const handleCheckout = useCallback(async (planId: string) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      window.location.href = `/login?plan=${planId}`;
+      return;
+    }
 
-      if (error) throw error;
-      if (data?.url) {
-        window.open(data.url, "_blank");
-      }
-    } catch (err: unknown) {
-      toast.error("Erro ao iniciar pagamento. Tente novamente.");
-      console.error(err);
-    } finally {
-      setCheckoutLoading(null);
+    const planInfo = planPrices[planId];
+    if (planInfo) {
+      setCheckoutPlan({ planId, ...planInfo });
     }
   }, []);
 
@@ -892,9 +887,8 @@ const LandingPage = () => {
                       className="w-full"
                       variant={plan.highlight ? "default" : "outline"}
                       onClick={() => handleCheckout(plan.planId)}
-                      disabled={checkoutLoading === plan.planId}
                     >
-                      {checkoutLoading === plan.planId ? "Aguarde..." : "Começar Agora"}
+                      Começar Agora
                     </Button>
                     <ul className="mt-4 space-y-2 text-left text-sm text-muted-foreground">
                       {plan.features.map((f) => (
@@ -1035,6 +1029,17 @@ const LandingPage = () => {
           </div>
         </div>
       </footer>
+
+      {/* Checkout Dialog */}
+      {checkoutPlan && (
+        <CheckoutDialog
+          planId={checkoutPlan.planId}
+          planName={checkoutPlan.name}
+          planPrice={checkoutPlan.price}
+          open={!!checkoutPlan}
+          onOpenChange={(open) => { if (!open) setCheckoutPlan(null); }}
+        />
+      )}
     </div>
   );
 };
