@@ -113,41 +113,78 @@ const Imports = () => {
       setHeaders(hdrs);
       setRawRows(json.slice(1, 6)); // preview first 5 rows
 
-      // Auto-guess mappings
-      const firstRow = json[1] || [];
-      const guessed: FieldMapping[] = hdrs.map((h, colIdx) => {
-        const lower = h.toLowerCase().trim();
-        if (lower.includes("nome") || lower.includes("name") || lower === "cliente" || lower === "client" || lower === "razão social" || lower === "razao social" || lower === "contato" || lower === "pessoa" || lower === "responsavel" || lower === "responsável") return "name";
-        if (lower.includes("tel") || lower.includes("phone") || lower.includes("cel") || lower.includes("whats") || lower === "mobile" || lower === "fone" || lower === "número" || lower === "numero" || lower === "ddd + telefone") return "phone";
-        if (lower.includes("email") || lower.includes("e-mail")) return "email";
-        if (lower.includes("compra") || lower.includes("purchase") || lower.includes("data") || lower.includes("date") || lower.includes("última") || lower.includes("ultima")) return "last_purchase";
-        return "ignore";
-      });
+      // Helper: check if a value looks like a phone number
+      const looksLikePhone = (v: string) => {
+        const digits = v.replace(/\D/g, "");
+        return digits.length >= 10 && digits.length <= 13;
+      };
 
-      // Fallback: if no column matched "name", find first text-looking column
+      // Helper: check if a value looks like text (name)
+      const looksLikeText = (v: string) => {
+        if (!v.trim()) return false;
+        if (looksLikePhone(v)) return false;
+        if (v.includes("@")) return false;
+        if (/^\d{4}-\d{2}-\d{2}/.test(v) || /^\d{1,2}\/\d{1,2}\/\d{4}/.test(v)) return false;
+        if (/^\d+([.,]\d+)?$/.test(v.trim())) return false;
+        // Has at least some letters
+        return /[a-zA-ZÀ-ÿ]/.test(v);
+      };
+
+      // Auto-guess by header name
+      const guessFromHeader = (h: string): FieldMapping => {
+        const lower = h.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+        // Name patterns
+        if (lower.includes("nome") || lower.includes("name") || lower === "cliente" || lower === "client"
+          || lower.includes("razao") || lower === "contato" || lower === "pessoa"
+          || lower.includes("responsavel") || lower === "fantasia" || lower === "empresa") return "name";
+        // Phone patterns
+        if (lower.includes("tel") || lower.includes("phone") || lower.includes("cel")
+          || lower.includes("whats") || lower === "mobile" || lower === "fone"
+          || lower.includes("numero") || lower.includes("ddd")) return "phone";
+        // Email
+        if (lower.includes("email") || lower.includes("e-mail")) return "email";
+        // Date
+        if (lower.includes("compra") || lower.includes("purchase") || lower.includes("data")
+          || lower.includes("date") || lower.includes("ultima") || lower.includes("pedido")) return "last_purchase";
+        return "ignore";
+      };
+
+      const guessed: FieldMapping[] = hdrs.map((h) => guessFromHeader(h));
+
+      // Sample multiple rows for better fallback detection
+      const sampleRows = json.slice(1, 6);
+
+      // Fallback: if no "name" detected, find the best text column by sampling data
       if (!guessed.includes("name")) {
         for (let i = 0; i < hdrs.length; i++) {
           if (guessed[i] !== "ignore") continue;
-          const sample = String(firstRow[i] || "").trim();
-          // Skip if it looks like a number, phone, email, or date
-          if (!sample) continue;
-          if (/^\d+$/.test(sample.replace(/\D/g, "")) && sample.replace(/\D/g, "").length >= 10) continue; // phone
-          if (sample.includes("@")) continue; // email
-          if (/^\d{4}-\d{2}-\d{2}/.test(sample) || /^\d{1,2}\/\d{1,2}\/\d{4}/.test(sample)) continue; // date
-          if (/^\d+([.,]\d+)?$/.test(sample)) continue; // pure number
-          // Looks like a name
-          guessed[i] = "name";
-          break;
+          const textCount = sampleRows.filter((row) => looksLikeText(String(row[i] || ""))).length;
+          if (textCount >= Math.min(2, sampleRows.length)) {
+            guessed[i] = "name";
+            break;
+          }
         }
       }
 
-      // Fallback: if no column matched "phone", find first phone-looking column
+      // Fallback: if no "phone" detected, find best phone column by sampling data
       if (!guessed.includes("phone")) {
         for (let i = 0; i < hdrs.length; i++) {
           if (guessed[i] !== "ignore") continue;
-          const sample = String(firstRow[i] || "").replace(/\D/g, "");
-          if (sample.length >= 10 && sample.length <= 13) {
+          const phoneCount = sampleRows.filter((row) => looksLikePhone(String(row[i] || ""))).length;
+          if (phoneCount >= Math.min(2, sampleRows.length)) {
             guessed[i] = "phone";
+            break;
+          }
+        }
+      }
+
+      // Last resort: if STILL no name, check if header itself looks like a name (no header row)
+      if (!guessed.includes("name")) {
+        for (let i = 0; i < hdrs.length; i++) {
+          if (guessed[i] !== "ignore") continue;
+          if (looksLikeText(hdrs[i]) && !looksLikePhone(hdrs[i]) && !hdrs[i].includes("@")) {
+            // First row might be data, not header — but we still map it
+            guessed[i] = "name";
             break;
           }
         }
@@ -268,6 +305,8 @@ const Imports = () => {
       setImporting(false);
       queryClient.invalidateQueries({ queryKey: ["imports", workspaceId] });
       queryClient.invalidateQueries({ queryKey: ["leads"] });
+      queryClient.invalidateQueries({ queryKey: ["pipeline-leads"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-leads"] });
     }
   };
 
