@@ -29,6 +29,36 @@ function normalizePhone(raw: string): string | null {
   return null;
 }
 
+function parseDate(raw: string | number | null): string | null {
+  if (raw == null || raw === "") return null;
+  const val = typeof raw === "string" ? raw.trim() : raw;
+
+  // Excel serial number (e.g. 45689 = 2025-01-23)
+  const num = Number(val);
+  if (!isNaN(num) && num > 30000 && num < 60000) {
+    // Excel epoch: 1899-12-30 (accounts for the 1900 leap year bug)
+    const ms = (num - 25569) * 86400000; // 25569 = days from 1899-12-30 to 1970-01-01
+    const d = new Date(ms);
+    return d.toISOString().split("T")[0];
+  }
+
+  // Already a date string (ISO, dd/mm/yyyy, etc.)
+  const str = String(val);
+
+  // Handle dd/mm/yyyy or dd-mm-yyyy (common in BR)
+  const brMatch = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  if (brMatch) {
+    const [, day, month, year] = brMatch;
+    const d = new Date(`${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`);
+    if (!isNaN(d.getTime())) return d.toISOString().split("T")[0];
+  }
+
+  const d = new Date(str);
+  if (!isNaN(d.getTime())) return d.toISOString().split("T")[0];
+
+  return null;
+}
+
 function calcDaysInactive(dateStr: string | null): number | null {
   if (!dateStr) return null;
   const d = new Date(dateStr);
@@ -128,13 +158,13 @@ const Imports = () => {
       .map((row) => {
         const phone = normalizePhone(row[phoneIdx] || "");
         if (!phone) return null;
-        const lastPurchase = purchaseIdx >= 0 ? String(row[purchaseIdx] || "") : null;
+        const lastPurchase = purchaseIdx >= 0 ? parseDate(row[purchaseIdx]) : null;
         return {
           workspace_id: workspaceId,
           name: nameIdx >= 0 ? String(row[nameIdx] || "") : null,
           phone,
           email: emailIdx >= 0 ? String(row[emailIdx] || "") : null,
-          last_purchase: lastPurchase || null,
+          last_purchase: lastPurchase,
           days_inactive: calcDaysInactive(lastPurchase),
           stage: "imported" as const,
         };
