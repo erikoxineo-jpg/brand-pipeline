@@ -4,7 +4,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Search, Download, Phone, Mail, ChevronLeft, ChevronRight, Ban, Upload, Users } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Search, Download, Phone, Mail, ChevronLeft, ChevronRight, Ban, Upload, Users, Trash2, Loader2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -43,6 +44,7 @@ const Leads = () => {
   const [stageFilter, setStageFilter] = useState<string>("all");
   const [page, setPage] = useState(0);
   const [editingStage, setEditingStage] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string[]>([]);
 
   const workspaceId = currentWorkspace?.id;
 
@@ -76,6 +78,13 @@ const Leads = () => {
   const totalCount = data?.count || 0;
   const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
+  const invalidateAll = () => {
+    queryClient.invalidateQueries({ queryKey: ["leads"] });
+    queryClient.invalidateQueries({ queryKey: ["pipeline-leads"], refetchType: "all" });
+    queryClient.invalidateQueries({ queryKey: ["dashboard-leads"], refetchType: "all" });
+    queryClient.invalidateQueries({ queryKey: ["checklist-leads"], refetchType: "all" });
+  };
+
   const updateStageMutation = useMutation({
     mutationFn: async ({ id, stage }: { id: string; stage: string }) => {
       const updates: any = { stage };
@@ -85,12 +94,82 @@ const Leads = () => {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["leads"] });
+      invalidateAll();
       setEditingStage(null);
       toast.success("Stage atualizado");
     },
     onError: (err: any) => toast.error(err.message),
   });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      // Delete in chunks of 100
+      for (let i = 0; i < ids.length; i += 100) {
+        const chunk = ids.slice(i, i + 100);
+        const { error } = await supabase.from("leads").delete().in("id", chunk);
+        if (error) throw error;
+      }
+      return ids.length;
+    },
+    onSuccess: (count) => {
+      toast.success(`${count} lead(s) excluído(s)`);
+      setSelected([]);
+      invalidateAll();
+    },
+    onError: (err: any) => toast.error(`Erro ao excluir: ${err.message}`),
+  });
+
+  const deleteAllFilteredMutation = useMutation({
+    mutationFn: async () => {
+      if (!workspaceId) return 0;
+      let query = supabase.from("leads").delete().eq("workspace_id", workspaceId);
+      if (stageFilter !== "all") {
+        query = query.eq("stage", stageFilter);
+      }
+      if (search) {
+        query = query.or(`name.ilike.%${search}%,phone.ilike.%${search}%`);
+      }
+      const { error, count } = await query.select("id", { count: "exact", head: true });
+      if (error) throw error;
+      return count || 0;
+    },
+    onSuccess: () => {
+      toast.success("Leads excluídos com sucesso");
+      setSelected([]);
+      setPage(0);
+      invalidateAll();
+    },
+    onError: (err: any) => toast.error(`Erro ao excluir: ${err.message}`),
+  });
+
+  const handleDeleteSelected = () => {
+    if (!selected.length) return;
+    if (!confirm(`Excluir ${selected.length} lead(s)? Esta ação não pode ser desfeita.`)) return;
+    deleteMutation.mutate(selected);
+  };
+
+  const handleDeleteAllFiltered = () => {
+    const label = stageFilter !== "all" ? stageLabels[stageFilter] : "todos";
+    const msg = search
+      ? `Excluir TODOS os leads que correspondem à busca "${search}"${stageFilter !== "all" ? ` e etapa "${stageLabels[stageFilter]}"` : ""}? (${totalCount} leads)`
+      : `Excluir TODOS os ${totalCount} leads com etapa "${label}"? Esta ação não pode ser desfeita.`;
+    if (!confirm(msg)) return;
+    deleteAllFilteredMutation.mutate();
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelected((prev) => prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]);
+  };
+
+  const toggleAll = () => {
+    const pageIds = leads.map((l) => l.id);
+    const allSelected = pageIds.every((id) => selected.includes(id));
+    if (allSelected) {
+      setSelected((prev) => prev.filter((id) => !pageIds.includes(id)));
+    } else {
+      setSelected((prev) => [...new Set([...prev, ...pageIds])]);
+    }
+  };
 
   const handleExportCSV = () => {
     if (!leads.length) return;
@@ -121,6 +200,10 @@ const Leads = () => {
     );
   }
 
+  const isDeleting = deleteMutation.isPending || deleteAllFilteredMutation.isPending;
+  const pageIds = leads.map((l) => l.id);
+  const allPageSelected = pageIds.length > 0 && pageIds.every((id) => selected.includes(id));
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -128,10 +211,24 @@ const Leads = () => {
           <h1 className="text-2xl font-semibold text-foreground">Leads</h1>
           <p className="text-sm text-muted-foreground">{totalCount} leads na base</p>
         </div>
-        <Button variant="outline" size="sm" onClick={handleExportCSV}>
-          <Download className="mr-2 h-4 w-4" />
-          Exportar
-        </Button>
+        <div className="flex gap-2">
+          {selected.length > 0 && (
+            <Button variant="destructive" size="sm" onClick={handleDeleteSelected} disabled={isDeleting}>
+              {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+              Excluir ({selected.length})
+            </Button>
+          )}
+          {totalCount > 0 && (stageFilter !== "all" || search) && (
+            <Button variant="outline" size="sm" className="text-destructive hover:text-destructive" onClick={handleDeleteAllFiltered} disabled={isDeleting}>
+              <Trash2 className="mr-2 h-4 w-4" />
+              Excluir todos ({totalCount})
+            </Button>
+          )}
+          <Button variant="outline" size="sm" onClick={handleExportCSV}>
+            <Download className="mr-2 h-4 w-4" />
+            Exportar
+          </Button>
+        </div>
       </div>
 
       <Card>
@@ -168,25 +265,31 @@ const Leads = () => {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-10">
+                  <Checkbox
+                    checked={allPageSelected}
+                    onCheckedChange={toggleAll}
+                  />
+                </TableHead>
                 <TableHead>Nome</TableHead>
                 <TableHead>Telefone</TableHead>
                 <TableHead>E-mail</TableHead>
                 <TableHead>Última Compra</TableHead>
                 <TableHead>Dias Inativo</TableHead>
                 <TableHead>Etapa</TableHead>
-                <TableHead className="w-16">Ações</TableHead>
+                <TableHead className="w-20">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                     Carregando...
                   </TableCell>
                 </TableRow>
               ) : leads.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-12">
+                  <TableCell colSpan={8} className="text-center py-12">
                     {!search && stageFilter === "all" ? (
                       <div className="flex flex-col items-center gap-3">
                         <Users className="h-10 w-10 text-muted-foreground" />
@@ -207,7 +310,13 @@ const Leads = () => {
                 </TableRow>
               ) : (
                 leads.map((lead) => (
-                  <TableRow key={lead.id}>
+                  <TableRow key={lead.id} className={selected.includes(lead.id) ? "bg-muted/50" : ""}>
+                    <TableCell>
+                      <Checkbox
+                        checked={selected.includes(lead.id)}
+                        onCheckedChange={() => toggleSelect(lead.id)}
+                      />
+                    </TableCell>
                     <TableCell className="font-medium">{lead.name || "—"}</TableCell>
                     <TableCell>
                       <span className="flex items-center gap-1.5">
@@ -255,17 +364,33 @@ const Leads = () => {
                       )}
                     </TableCell>
                     <TableCell>
-                      {!lead.opt_out && (
+                      <div className="flex items-center gap-1">
+                        {!lead.opt_out && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-destructive"
+                            title="Marcar como Opt-out"
+                            onClick={() => updateStageMutation.mutate({ id: lead.id, stage: "optout" })}
+                          >
+                            <Ban className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-8 w-8 text-destructive"
-                          title="Marcar como Opt-out"
-                          onClick={() => updateStageMutation.mutate({ id: lead.id, stage: "optout" })}
+                          className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                          title="Excluir lead"
+                          onClick={() => {
+                            if (confirm(`Excluir "${lead.name || lead.phone}"?`)) {
+                              deleteMutation.mutate([lead.id]);
+                            }
+                          }}
+                          disabled={isDeleting}
                         >
-                          <Ban className="h-3.5 w-3.5" />
+                          <Trash2 className="h-3.5 w-3.5" />
                         </Button>
-                      )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))
