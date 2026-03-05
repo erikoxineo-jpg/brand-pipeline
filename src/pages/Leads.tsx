@@ -4,8 +4,9 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Search, Download, Phone, Mail, ChevronLeft, ChevronRight, Ban } from "lucide-react";
+import { Search, Download, Phone, Mail, ChevronLeft, ChevronRight, Ban, Upload, Users } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -37,6 +38,7 @@ const PAGE_SIZE = 20;
 const Leads = () => {
   const { currentWorkspace } = useAuth();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [stageFilter, setStageFilter] = useState<string>("all");
   const [page, setPage] = useState(0);
@@ -184,8 +186,23 @@ const Leads = () => {
                 </TableRow>
               ) : leads.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                    Nenhum lead encontrado
+                  <TableCell colSpan={7} className="text-center py-12">
+                    {!search && stageFilter === "all" ? (
+                      <div className="flex flex-col items-center gap-3">
+                        <Users className="h-10 w-10 text-muted-foreground" />
+                        <div>
+                          <p className="font-medium text-foreground">Nenhum lead importado</p>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            Importe sua lista de clientes para começar
+                          </p>
+                        </div>
+                        <Button size="sm" onClick={() => navigate("/imports")}>
+                          <Upload className="mr-2 h-4 w-4" /> Importar Leads
+                        </Button>
+                      </div>
+                    ) : (
+                      <p className="text-muted-foreground">Nenhum lead encontrado para esses filtros</p>
+                    )}
                   </TableCell>
                 </TableRow>
               ) : (

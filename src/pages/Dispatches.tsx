@@ -5,8 +5,10 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Search, Send, Filter, MessageSquare, Loader2, RefreshCw } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Search, Send, Filter, MessageSquare, Loader2, RefreshCw, Megaphone, Brain } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -20,9 +22,19 @@ const statusConfig: Record<string, { label: string; className: string }> = {
   failed: { label: "Falhou", className: "bg-destructive/10 text-destructive" },
 };
 
+const aiClassConfig: Record<string, { label: string; className: string }> = {
+  positive: { label: "Positivo", className: "bg-success/10 text-success" },
+  negative: { label: "Negativo", className: "bg-destructive/10 text-destructive" },
+  question: { label: "Dúvida", className: "bg-primary/10 text-primary" },
+  opt_out: { label: "Opt-out", className: "bg-secondary text-muted-foreground" },
+  greeting: { label: "Saudação", className: "bg-chart-4/10 text-chart-4" },
+  other: { label: "Outro", className: "bg-secondary text-muted-foreground" },
+};
+
 const Dispatches = () => {
   const { currentWorkspace, session } = useAuth();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const workspaceId = currentWorkspace?.id;
 
   const [selected, setSelected] = useState<string[]>([]);
@@ -242,6 +254,7 @@ const Dispatches = () => {
                 <TableHead>Campanha</TableHead>
                 <TableHead>Enviado em</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>IA</TableHead>
                 <TableHead>Última Resposta</TableHead>
                 <TableHead className="w-20">Ação</TableHead>
               </TableRow>
@@ -249,11 +262,28 @@ const Dispatches = () => {
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">Carregando...</TableCell>
+                  <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">Carregando...</TableCell>
                 </TableRow>
               ) : filtered.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">Nenhum disparo encontrado</TableCell>
+                  <TableCell colSpan={9} className="text-center py-12">
+                    {dispatches.length === 0 && !search && statusFilter === "all" && campaignFilter === "all" ? (
+                      <div className="flex flex-col items-center gap-3">
+                        <Send className="h-10 w-10 text-muted-foreground" />
+                        <div>
+                          <p className="font-medium text-foreground">Nenhum disparo criado</p>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            Vá até Campanhas, selecione leads e crie disparos
+                          </p>
+                        </div>
+                        <Button size="sm" onClick={() => navigate("/campaigns")}>
+                          <Megaphone className="mr-2 h-4 w-4" /> Ir para Campanhas
+                        </Button>
+                      </div>
+                    ) : (
+                      <p className="text-muted-foreground">Nenhum disparo encontrado para esses filtros</p>
+                    )}
+                  </TableCell>
                 </TableRow>
               ) : (
                 filtered.map((dispatch: any) => {
@@ -276,6 +306,24 @@ const Dispatches = () => {
                       </TableCell>
                       <TableCell>
                         <Badge variant="secondary" className={st.className}>{st.label}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        {dispatch.ai_classification ? (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger>
+                                <Badge variant="secondary" className={aiClassConfig[dispatch.ai_classification]?.className || ""}>
+                                  {aiClassConfig[dispatch.ai_classification]?.label || dispatch.ai_classification}
+                                </Badge>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p className="max-w-[200px] text-xs">{dispatch.ai_summary || "Sem resumo"}</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
                       </TableCell>
                       <TableCell className="text-muted-foreground text-xs max-w-[200px] truncate">
                         {lastReplies[dispatch.lead_id]

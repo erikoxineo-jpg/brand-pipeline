@@ -10,12 +10,14 @@ import { Switch } from "@/components/ui/switch";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
 } from "@/components/ui/dialog";
-import { Plus, Play, Pause, MessageSquare, HelpCircle, Gift, Loader2, Pencil, Trash2, RefreshCw } from "lucide-react";
+import { Slider } from "@/components/ui/slider";
+import { Plus, Play, Pause, MessageSquare, HelpCircle, Gift, Loader2, Pencil, Trash2, RefreshCw, Send, Megaphone, Bot } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { Json } from "@/integrations/supabase/types";
+import CreateDispatchesDialog from "@/components/CreateDispatchesDialog";
 
 const statusLabels: Record<string, string> = {
   draft: "Rascunho",
@@ -44,6 +46,7 @@ const Campaigns = () => {
   const [createOpen, setCreateOpen] = useState(false);
   const [newName, setNewName] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [dispatchCampaign, setDispatchCampaign] = useState<{ id: string; name: string } | null>(null);
 
   // Form state for editing
   const [editTemplate, setEditTemplate] = useState("");
@@ -55,6 +58,12 @@ const Campaigns = () => {
   // Follow-up state
   const [editFollowupEnabled, setEditFollowupEnabled] = useState(false);
   const [editFollowupMessages, setEditFollowupMessages] = useState<FollowupMessage[]>([]);
+
+  // Automation state
+  const [editAutoDispatch, setEditAutoDispatch] = useState(true);
+  const [editAutoRespond, setEditAutoRespond] = useState(false);
+  const [editAutoRespondContext, setEditAutoRespondContext] = useState("");
+  const [editMaxDaily, setEditMaxDaily] = useState(100);
 
   const { data: campaigns = [], isLoading } = useQuery({
     queryKey: ["campaigns", workspaceId],
@@ -137,6 +146,10 @@ const Campaigns = () => {
         offer_rule: editOfferRule || null,
         followup_enabled: editFollowupEnabled,
         followup_messages: editFollowupMessages as unknown as Json,
+        auto_dispatch: editAutoDispatch,
+        auto_respond: editAutoRespond,
+        auto_respond_context: editAutoRespondContext || null,
+        max_daily_dispatches: editMaxDaily,
       }).eq("id", editingId);
       if (error) throw error;
     },
@@ -173,6 +186,10 @@ const Campaigns = () => {
       ? (campaign.followup_messages as unknown as FollowupMessage[])
       : [];
     setEditFollowupMessages(fMessages);
+    setEditAutoDispatch(campaign.auto_dispatch ?? true);
+    setEditAutoRespond(campaign.auto_respond ?? false);
+    setEditAutoRespondContext(campaign.auto_respond_context || "");
+    setEditMaxDaily(campaign.max_daily_dispatches ?? 100);
   };
 
   const editingCampaign = campaigns.find((c) => c.id === editingId);
@@ -251,8 +268,19 @@ const Campaigns = () => {
         <div className="text-center py-8 text-muted-foreground">Carregando...</div>
       ) : campaigns.length === 0 ? (
         <Card>
-          <CardContent className="py-8 text-center text-muted-foreground">
-            Nenhuma campanha ainda. Crie a primeira!
+          <CardContent className="py-12 text-center">
+            <div className="flex flex-col items-center gap-3">
+              <Megaphone className="h-10 w-10 text-muted-foreground" />
+              <div>
+                <p className="font-medium text-foreground">Nenhuma campanha ainda</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Crie uma campanha para definir mensagens e selecionar leads para disparo
+                </p>
+              </div>
+              <Button size="sm" onClick={() => setCreateOpen(true)}>
+                <Plus className="mr-2 h-4 w-4" /> Nova Campanha
+              </Button>
+            </div>
           </CardContent>
         </Card>
       ) : (
@@ -275,6 +303,12 @@ const Campaigns = () => {
                             Follow-up
                           </Badge>
                         )}
+                        {c.auto_dispatch && (
+                          <Badge variant="outline" className="text-[10px] border-primary/30 text-primary">
+                            <Bot className="h-3 w-3 mr-1" />
+                            Auto
+                          </Badge>
+                        )}
                       </div>
                     </div>
                     <div className="flex gap-1">
@@ -288,8 +322,11 @@ const Campaigns = () => {
                           <Play className="h-4 w-4" />
                         </Button>
                       )}
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => startEditing(c)}>
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => startEditing(c)} title="Editar campanha">
                         <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-primary" onClick={() => setDispatchCampaign({ id: c.id, name: c.name })} title="Selecionar leads para disparo">
+                        <Send className="h-4 w-4" />
                       </Button>
                     </div>
                   </div>
@@ -344,6 +381,9 @@ const Campaigns = () => {
                 </TabsTrigger>
                 <TabsTrigger value="followup" className="gap-2">
                   <RefreshCw className="h-4 w-4" /> Follow-up
+                </TabsTrigger>
+                <TabsTrigger value="automation" className="gap-2">
+                  <Bot className="h-4 w-4" /> Automação
                 </TabsTrigger>
                 <TabsTrigger value="survey" className="gap-2">
                   <HelpCircle className="h-4 w-4" /> Pesquisa
@@ -442,6 +482,76 @@ const Campaigns = () => {
                 )}
               </TabsContent>
 
+              <TabsContent value="automation" className="space-y-5 pt-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label>Auto-dispatch</Label>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Sistema seleciona leads elegíveis automaticamente
+                    </p>
+                  </div>
+                  <Switch
+                    checked={editAutoDispatch}
+                    onCheckedChange={setEditAutoDispatch}
+                  />
+                </div>
+
+                {editAutoDispatch && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label>Max disparos/dia</Label>
+                      <span className="text-sm font-medium text-foreground">{editMaxDaily}</span>
+                    </div>
+                    <Slider
+                      value={[editMaxDaily]}
+                      onValueChange={([v]) => setEditMaxDaily(v)}
+                      min={10}
+                      max={500}
+                      step={10}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Limite diário de novos disparos criados automaticamente
+                    </p>
+                  </div>
+                )}
+
+                <div className="border-t pt-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label>Resposta automática (IA)</Label>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        IA classifica respostas e responde automaticamente
+                      </p>
+                    </div>
+                    <Switch
+                      checked={editAutoRespond}
+                      onCheckedChange={setEditAutoRespond}
+                    />
+                  </div>
+                </div>
+
+                {editAutoRespond && (
+                  <div className="space-y-2">
+                    <Label>Contexto do negócio</Label>
+                    <Textarea
+                      placeholder="Descreva seu negócio para a IA: produtos, preços, horários de funcionamento, endereço, formas de pagamento..."
+                      className="min-h-[100px]"
+                      value={editAutoRespondContext}
+                      onChange={(e) => setEditAutoRespondContext(e.target.value)}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Essas informações ajudam a IA a responder com contexto relevante
+                    </p>
+                  </div>
+                )}
+
+                <div className="rounded-lg bg-muted p-3 mt-4">
+                  <p className="text-xs text-muted-foreground">
+                    Quando ativada, a campanha vai automaticamente: selecionar leads elegíveis, enviar mensagens, classificar respostas com IA, e enviar follow-ups. O motor roda a cada 5 minutos.
+                  </p>
+                </div>
+              </TabsContent>
+
               <TabsContent value="survey" className="space-y-4 pt-4">
                 <div className="space-y-3">
                   {editQuestions.map((q, i) => (
@@ -504,6 +614,17 @@ const Campaigns = () => {
             </Tabs>
           </CardContent>
         </Card>
+      )}
+
+      {/* Create Dispatches Dialog */}
+      {dispatchCampaign && workspaceId && (
+        <CreateDispatchesDialog
+          campaignId={dispatchCampaign.id}
+          campaignName={dispatchCampaign.name}
+          workspaceId={workspaceId}
+          open={!!dispatchCampaign}
+          onOpenChange={(open) => { if (!open) setDispatchCampaign(null); }}
+        />
       )}
     </div>
   );

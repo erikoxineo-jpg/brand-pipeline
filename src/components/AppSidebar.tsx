@@ -16,11 +16,11 @@ import { Badge } from "@/components/ui/badge";
 
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { name: "Importar", href: "/imports", icon: Upload },
   { name: "Leads", href: "/leads", icon: Users },
-  { name: "Imports", href: "/imports", icon: Upload },
   { name: "Campanhas", href: "/campaigns", icon: Megaphone },
-  { name: "Pipeline", href: "/pipeline", icon: Kanban },
   { name: "Disparos", href: "/dispatches", icon: MessageSquare },
+  { name: "Pipeline", href: "/pipeline", icon: Kanban },
   { name: "Configurações", href: "/settings", icon: Settings },
   { name: "Manual", href: "/manual", icon: BookOpen },
 ];

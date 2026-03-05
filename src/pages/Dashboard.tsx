@@ -1,9 +1,13 @@
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Users, MessageSquare, TrendingUp, ShoppingCart, ArrowUpRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Users, MessageSquare, TrendingUp, ShoppingCart, ArrowUpRight, CheckCircle2, Circle, Wifi, Upload, Megaphone, Send, X, Bot, Zap } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from "recharts";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 
 const COLORS = [
   "hsl(221, 83%, 53%)",
@@ -24,6 +28,130 @@ const STAGE_LABELS: Record<string, string> = {
   reactivated: "Reativados",
   optout: "Opt-out",
 };
+
+const CHECKLIST_DISMISSED_KEY = "reconnect_onboarding_dismissed";
+
+function GettingStartedChecklist({ workspaceId }: { workspaceId: string }) {
+  const navigate = useNavigate();
+  const [dismissed, setDismissed] = useState(
+    () => localStorage.getItem(CHECKLIST_DISMISSED_KEY) === "true"
+  );
+
+  const { data: waConfig } = useQuery({
+    queryKey: ["checklist-wa", workspaceId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("whatsapp_config")
+        .select("evolution_status, access_token")
+        .eq("workspace_id", workspaceId)
+        .single();
+      return data;
+    },
+    enabled: !dismissed,
+  });
+
+  const { data: leadCount = 0 } = useQuery({
+    queryKey: ["checklist-leads", workspaceId],
+    queryFn: async () => {
+      const { count } = await supabase
+        .from("leads")
+        .select("id", { count: "exact", head: true })
+        .eq("workspace_id", workspaceId);
+      return count || 0;
+    },
+    enabled: !dismissed,
+  });
+
+  const { data: campaignCount = 0 } = useQuery({
+    queryKey: ["checklist-campaigns", workspaceId],
+    queryFn: async () => {
+      const { count } = await supabase
+        .from("campaigns")
+        .select("id", { count: "exact", head: true })
+        .eq("workspace_id", workspaceId);
+      return count || 0;
+    },
+    enabled: !dismissed,
+  });
+
+  const { data: dispatchSentCount = 0 } = useQuery({
+    queryKey: ["checklist-dispatches", workspaceId],
+    queryFn: async () => {
+      const { count } = await supabase
+        .from("dispatches")
+        .select("id", { count: "exact", head: true })
+        .eq("workspace_id", workspaceId)
+        .neq("status", "pending");
+      return count || 0;
+    },
+    enabled: !dismissed,
+  });
+
+  const steps = [
+    { label: "Conectar WhatsApp", done: waConfig?.evolution_status === "connected" || !!waConfig?.access_token, href: "/settings", icon: Wifi },
+    { label: "Importar Leads", done: leadCount > 0, href: "/imports", icon: Upload },
+    { label: "Criar Campanha", done: campaignCount > 0, href: "/campaigns", icon: Megaphone },
+    { label: "Enviar Primeiro Disparo", done: dispatchSentCount > 0, href: "/dispatches", icon: Send },
+  ];
+
+  const allDone = steps.every((s) => s.done);
+  const completedCount = steps.filter((s) => s.done).length;
+
+  if (dismissed || allDone) return null;
+
+  return (
+    <Card className="border-primary/20 bg-primary/5">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="text-base">Primeiros Passos</CardTitle>
+            <p className="text-xs text-muted-foreground mt-0.5">{completedCount} de {steps.length} concluídos</p>
+          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={() => {
+              setDismissed(true);
+              localStorage.setItem(CHECKLIST_DISMISSED_KEY, "true");
+            }}
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="pt-0">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {steps.map((step, i) => (
+            <div
+              key={i}
+              className={`flex items-center gap-3 rounded-lg border p-3 transition-colors ${
+                step.done ? "bg-background/50 border-border" : "bg-background border-primary/20 cursor-pointer hover:border-primary/40"
+              }`}
+              onClick={() => !step.done && navigate(step.href)}
+            >
+              {step.done ? (
+                <CheckCircle2 className="h-5 w-5 text-success shrink-0" />
+              ) : (
+                <Circle className="h-5 w-5 text-muted-foreground/40 shrink-0" />
+              )}
+              <div className="flex-1 min-w-0">
+                <span className={`text-sm ${step.done ? "text-muted-foreground line-through" : "text-foreground font-medium"}`}>
+                  {step.label}
+                </span>
+              </div>
+              {!step.done && (
+                <Button variant="ghost" size="sm" className="shrink-0 text-xs h-7 px-2">
+                  Configurar
+                </Button>
+              )}
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 const Dashboard = () => {
   const { currentWorkspace } = useAuth();
@@ -171,6 +299,56 @@ const Dashboard = () => {
     enabled: !!workspaceId,
   });
 
+  // Agent stats (automation)
+  const { data: agentStats } = useQuery({
+    queryKey: ["dashboard-agent", workspaceId],
+    queryFn: async () => {
+      if (!workspaceId) return { activeCampaigns: 0, sent24h: 0, classified24h: 0, autoResponded24h: 0 };
+
+      const yesterday = new Date(Date.now() - 86400000).toISOString();
+
+      // Active campaigns with auto_dispatch
+      const { count: activeCampaigns } = await supabase
+        .from("campaigns")
+        .select("id", { count: "exact", head: true })
+        .eq("workspace_id", workspaceId)
+        .eq("status", "active")
+        .eq("auto_dispatch", true);
+
+      // Dispatches sent in last 24h
+      const { count: sent24h } = await supabase
+        .from("dispatches")
+        .select("id", { count: "exact", head: true })
+        .eq("workspace_id", workspaceId)
+        .neq("status", "pending")
+        .gte("sent_at", yesterday);
+
+      // Dispatches with AI classification in last 24h
+      const { count: classified24h } = await supabase
+        .from("dispatches")
+        .select("id", { count: "exact", head: true })
+        .eq("workspace_id", workspaceId)
+        .not("ai_classification", "is", null)
+        .gte("created_at", yesterday);
+
+      // Auto-responded (outbound messages in last 24h that have dispatch_id)
+      const { count: autoResponded24h } = await supabase
+        .from("messages")
+        .select("id", { count: "exact", head: true })
+        .eq("workspace_id", workspaceId)
+        .eq("direction", "outbound")
+        .gte("created_at", yesterday);
+
+      return {
+        activeCampaigns: activeCampaigns || 0,
+        sent24h: sent24h || 0,
+        classified24h: classified24h || 0,
+        autoResponded24h: autoResponded24h || 0,
+      };
+    },
+    enabled: !!workspaceId,
+  });
+
   const totalLeads = leadStages.reduce((sum, s) => sum + s.value, 0);
   const reactivated = leadStages.find((s) => s.key === "reactivated")?.value || 0;
   const responseRate = dispatchStats?.sent
@@ -206,6 +384,9 @@ const Dashboard = () => {
         </p>
       </div>
 
+      {/* Getting Started Checklist */}
+      {workspaceId && <GettingStartedChecklist workspaceId={workspaceId} />}
+
       {/* KPI Cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {kpis.map((kpi) => (
@@ -224,6 +405,43 @@ const Dashboard = () => {
           </Card>
         ))}
       </div>
+
+      {/* Agent Panel */}
+      {agentStats && (
+        <Card className={agentStats.activeCampaigns > 0 ? "border-primary/20 bg-primary/5" : ""}>
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
+                  <Bot className="h-4 w-4 text-primary" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-medium text-foreground">Agente Autônomo</h3>
+                  <p className="text-[10px] text-muted-foreground">Motor roda a cada 5 min</p>
+                </div>
+              </div>
+              <Badge variant="secondary" className={agentStats.activeCampaigns > 0 ? "bg-success/10 text-success" : "bg-secondary text-muted-foreground"}>
+                <Zap className="h-3 w-3 mr-1" />
+                {agentStats.activeCampaigns > 0 ? "Ativo" : "Inativo"}
+              </Badge>
+            </div>
+            <div className="grid grid-cols-3 gap-4 text-center">
+              <div>
+                <p className="text-lg font-semibold text-foreground">{agentStats.sent24h}</p>
+                <p className="text-[10px] text-muted-foreground">Enviados (24h)</p>
+              </div>
+              <div>
+                <p className="text-lg font-semibold text-foreground">{agentStats.classified24h}</p>
+                <p className="text-[10px] text-muted-foreground">IA Classificou</p>
+              </div>
+              <div>
+                <p className="text-lg font-semibold text-foreground">{agentStats.autoResponded24h}</p>
+                <p className="text-[10px] text-muted-foreground">Respostas Auto</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* Funnel */}

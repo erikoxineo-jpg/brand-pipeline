@@ -171,6 +171,8 @@ export type Database = {
           stage: string
           opt_out: boolean
           metadata: Json | null
+          ai_classification: string | null
+          ai_summary: string | null
           created_at: string
           updated_at: string
         }
@@ -185,6 +187,8 @@ export type Database = {
           stage?: string
           opt_out?: boolean
           metadata?: Json | null
+          ai_classification?: string | null
+          ai_summary?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -199,6 +203,8 @@ export type Database = {
           stage?: string
           opt_out?: boolean
           metadata?: Json | null
+          ai_classification?: string | null
+          ai_summary?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -274,6 +280,10 @@ export type Database = {
           followup_enabled: boolean
           followup_messages: Json | null
           followup_interval_days: number
+          auto_dispatch: boolean
+          auto_respond: boolean
+          auto_respond_context: string | null
+          max_daily_dispatches: number
           created_at: string
           updated_at: string
         }
@@ -291,6 +301,10 @@ export type Database = {
           followup_enabled?: boolean
           followup_messages?: Json | null
           followup_interval_days?: number
+          auto_dispatch?: boolean
+          auto_respond?: boolean
+          auto_respond_context?: string | null
+          max_daily_dispatches?: number
           created_at?: string
           updated_at?: string
         }
@@ -308,6 +322,10 @@ export type Database = {
           followup_enabled?: boolean
           followup_messages?: Json | null
           followup_interval_days?: number
+          auto_dispatch?: boolean
+          auto_respond?: boolean
+          auto_respond_context?: string | null
+          max_daily_dispatches?: number
           created_at?: string
           updated_at?: string
         }
@@ -336,6 +354,9 @@ export type Database = {
           error_message: string | null
           followup_index: number
           next_followup_at: string | null
+          ai_classification: string | null
+          ai_confidence: number | null
+          ai_summary: string | null
           created_at: string
         }
         Insert: {
@@ -352,6 +373,9 @@ export type Database = {
           error_message?: string | null
           followup_index?: number
           next_followup_at?: string | null
+          ai_classification?: string | null
+          ai_confidence?: number | null
+          ai_summary?: string | null
           created_at?: string
         }
         Update: {
@@ -368,6 +392,9 @@ export type Database = {
           error_message?: string | null
           followup_index?: number
           next_followup_at?: string | null
+          ai_classification?: string | null
+          ai_confidence?: number | null
+          ai_summary?: string | null
           created_at?: string
         }
         Relationships: [

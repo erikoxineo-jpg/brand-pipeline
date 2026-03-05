@@ -115,6 +115,24 @@ serve(async (req) => {
           })
           .eq("id", dispatch.id);
       }
+
+      // Fire-and-forget: call classify-response for AI classification
+      if (!isOptOut && msgText.trim()) {
+        const classifyUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/classify-response`;
+        fetch(classifyUrl, {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            lead_id: lead.id,
+            dispatch_id: dispatch?.id || null,
+            message_body: msgText,
+            workspace_id: lead.workspace_id,
+          }),
+        }).catch((err) => console.error("classify-response call failed:", err.message));
+      }
     }
 
     return new Response("OK", { status: 200 });

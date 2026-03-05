@@ -115,11 +115,11 @@ const Imports = () => {
 
       // Auto-guess mappings
       const guessed: FieldMapping[] = hdrs.map((h) => {
-        const lower = h.toLowerCase();
-        if (lower.includes("nome") || lower.includes("name")) return "name";
-        if (lower.includes("tel") || lower.includes("phone") || lower.includes("cel") || lower.includes("whats")) return "phone";
+        const lower = h.toLowerCase().trim();
+        if (lower.includes("nome") || lower.includes("name") || lower === "cliente" || lower === "client" || lower === "razão social" || lower === "razao social" || lower === "contato") return "name";
+        if (lower.includes("tel") || lower.includes("phone") || lower.includes("cel") || lower.includes("whats") || lower === "mobile" || lower === "fone" || lower === "número" || lower === "numero") return "phone";
         if (lower.includes("email") || lower.includes("e-mail")) return "email";
-        if (lower.includes("compra") || lower.includes("purchase") || lower.includes("data") || lower.includes("date")) return "last_purchase";
+        if (lower.includes("compra") || lower.includes("purchase") || lower.includes("data") || lower.includes("date") || lower.includes("última") || lower.includes("ultima")) return "last_purchase";
         return "ignore";
       });
       setMappings(guessed);
@@ -202,7 +202,18 @@ const Imports = () => {
         created_by: user.id,
       });
 
-      toast.success(`Importação concluída: ${newLeads} novos, ${duplicates} duplicatas`);
+      // Auto-mark eligible leads (90+ days inactive)
+      const { count: eligibleCount } = await supabase
+        .from("leads")
+        .update({ stage: "eligible" })
+        .eq("workspace_id", workspaceId)
+        .eq("stage", "imported")
+        .gte("days_inactive", 90)
+        .eq("opt_out", false)
+        .select("id", { count: "exact", head: true });
+
+      const eligibleMsg = eligibleCount ? ` ${eligibleCount} marcados como elegíveis.` : "";
+      toast.success(`Importação concluída: ${newLeads} novos, ${duplicates} duplicatas.${eligibleMsg}`);
       setFileName(null);
       setRawRows([]);
       setHeaders([]);
@@ -368,8 +379,12 @@ const Imports = () => {
             <TableBody>
               {importHistory.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
-                    Nenhuma importação ainda
+                  <TableCell colSpan={6} className="text-center py-8">
+                    <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                      <FileSpreadsheet className="h-8 w-8" />
+                      <p>Nenhuma importação ainda</p>
+                      <p className="text-xs">Use a área de upload acima para importar sua primeira lista</p>
+                    </div>
                   </TableCell>
                 </TableRow>
               ) : (

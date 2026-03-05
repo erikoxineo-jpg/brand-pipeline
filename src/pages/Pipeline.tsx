@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Phone, Clock, X, MessageSquare } from "lucide-react";
+import { Phone, Clock, X, MessageSquare, Brain } from "lucide-react";
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle,
 } from "@/components/ui/sheet";
@@ -60,6 +60,8 @@ type Lead = {
   email: string | null;
   last_purchase: string | null;
   opt_out: boolean;
+  ai_classification: string | null;
+  ai_summary: string | null;
 };
 
 type Message = {
@@ -98,7 +100,26 @@ function DraggableCard({ lead, onClick }: { lead: Lead; onClick: () => void }) {
     <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
       <Card className="cursor-grab hover:shadow-md transition-shadow" onClick={onClick}>
         <CardContent className="p-4">
-          <p className="font-medium text-sm text-foreground">{lead.name || "Sem nome"}</p>
+          <div className="flex items-center justify-between">
+            <p className="font-medium text-sm text-foreground">{lead.name || "Sem nome"}</p>
+            {lead.ai_classification && (
+              <Badge variant="secondary" className={`text-[9px] px-1.5 py-0 ${
+                lead.ai_classification === "positive" ? "bg-success/10 text-success" :
+                lead.ai_classification === "negative" ? "bg-destructive/10 text-destructive" :
+                lead.ai_classification === "question" ? "bg-primary/10 text-primary" :
+                "bg-secondary text-muted-foreground"
+              }`}>
+                {lead.ai_classification === "positive" ? "+" :
+                 lead.ai_classification === "negative" ? "-" :
+                 lead.ai_classification === "question" ? "?" :
+                 lead.ai_classification === "opt_out" ? "x" :
+                 lead.ai_classification.charAt(0)}
+              </Badge>
+            )}
+          </div>
+          {lead.ai_summary && (
+            <p className="text-[10px] text-muted-foreground mt-1 line-clamp-1">{lead.ai_summary}</p>
+          )}
           <div className="mt-2 flex items-center gap-3 text-xs text-muted-foreground">
             <span className="flex items-center gap-1">
               <Phone className="h-3 w-3" />
@@ -225,7 +246,7 @@ const Pipeline = () => {
       if (!workspaceId) return [];
       const { data, error } = await supabase
         .from("leads")
-        .select("id, name, phone, days_inactive, stage, email, last_purchase, opt_out")
+        .select("id, name, phone, days_inactive, stage, email, last_purchase, opt_out, ai_classification, ai_summary")
         .eq("workspace_id", workspaceId)
         .in("stage", PIPELINE_STAGES as unknown as string[]);
       if (error) throw error;
@@ -412,6 +433,22 @@ const Pipeline = () => {
                     <p className="font-medium">{detailLead.last_purchase || "—"}</p>
                   </div>
                 </div>
+                {detailLead.ai_classification && (
+                  <div className="mt-2 flex items-center gap-2">
+                    <Brain className="h-3 w-3 text-primary" />
+                    <Badge variant="secondary" className={`text-[10px] ${
+                      detailLead.ai_classification === "positive" ? "bg-success/10 text-success" :
+                      detailLead.ai_classification === "negative" ? "bg-destructive/10 text-destructive" :
+                      detailLead.ai_classification === "question" ? "bg-primary/10 text-primary" :
+                      "bg-secondary text-muted-foreground"
+                    }`}>
+                      {detailLead.ai_classification}
+                    </Badge>
+                    {detailLead.ai_summary && (
+                      <span className="text-[10px] text-muted-foreground truncate">{detailLead.ai_summary}</span>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Chat Thread */}
