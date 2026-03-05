@@ -6,10 +6,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Switch } from "@/components/ui/switch";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
 } from "@/components/ui/dialog";
-import { Plus, Play, Pause, MessageSquare, HelpCircle, Gift, Loader2, Pencil, Trash2 } from "lucide-react";
+import { Plus, Play, Pause, MessageSquare, HelpCircle, Gift, Loader2, Pencil, Trash2, RefreshCw } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -30,6 +31,11 @@ const statusColors: Record<string, string> = {
   completed: "bg-secondary text-muted-foreground",
 };
 
+type FollowupMessage = {
+  delay_days: number;
+  template: string;
+};
+
 const Campaigns = () => {
   const { currentWorkspace } = useAuth();
   const queryClient = useQueryClient();
@@ -45,6 +51,10 @@ const Campaigns = () => {
   const [editOfferType, setEditOfferType] = useState("");
   const [editOfferValue, setEditOfferValue] = useState("");
   const [editOfferRule, setEditOfferRule] = useState("");
+
+  // Follow-up state
+  const [editFollowupEnabled, setEditFollowupEnabled] = useState(false);
+  const [editFollowupMessages, setEditFollowupMessages] = useState<FollowupMessage[]>([]);
 
   const { data: campaigns = [], isLoading } = useQuery({
     queryKey: ["campaigns", workspaceId],
@@ -125,6 +135,8 @@ const Campaigns = () => {
         offer_type: editOfferType || null,
         offer_value: editOfferValue || null,
         offer_rule: editOfferRule || null,
+        followup_enabled: editFollowupEnabled,
+        followup_messages: editFollowupMessages as unknown as Json,
       }).eq("id", editingId);
       if (error) throw error;
     },
@@ -156,6 +168,11 @@ const Campaigns = () => {
     setEditOfferType(campaign.offer_type || "");
     setEditOfferValue(campaign.offer_value || "");
     setEditOfferRule(campaign.offer_rule || "");
+    setEditFollowupEnabled(campaign.followup_enabled || false);
+    const fMessages = Array.isArray(campaign.followup_messages)
+      ? (campaign.followup_messages as unknown as FollowupMessage[])
+      : [];
+    setEditFollowupMessages(fMessages);
   };
 
   const editingCampaign = campaigns.find((c) => c.id === editingId);
@@ -165,6 +182,27 @@ const Campaigns = () => {
     .replace(/\{\{nome\}\}/g, "Maria")
     .replace(/\{\{dias\}\}/g, "120")
     .replace(/\{\{marca\}\}/g, currentWorkspace?.name || "Marca");
+
+  const previewFollowup = (template: string) =>
+    template
+      .replace(/\{\{nome\}\}/g, "Maria")
+      .replace(/\{\{dias\}\}/g, "120")
+      .replace(/\{\{marca\}\}/g, currentWorkspace?.name || "Marca");
+
+  const addFollowupMessage = () => {
+    if (editFollowupMessages.length >= 2) return;
+    setEditFollowupMessages([...editFollowupMessages, { delay_days: 3, template: "" }]);
+  };
+
+  const updateFollowupMessage = (index: number, field: keyof FollowupMessage, value: any) => {
+    const next = [...editFollowupMessages];
+    next[index] = { ...next[index], [field]: value };
+    setEditFollowupMessages(next);
+  };
+
+  const removeFollowupMessage = (index: number) => {
+    setEditFollowupMessages(editFollowupMessages.filter((_, i) => i !== index));
+  };
 
   if (!currentWorkspace) {
     return (
@@ -227,9 +265,17 @@ const Campaigns = () => {
                   <div className="flex items-start justify-between">
                     <div>
                       <h3 className="font-medium text-foreground">{c.name}</h3>
-                      <Badge variant="secondary" className={`mt-1 ${statusColors[c.status] || ""}`}>
-                        {statusLabels[c.status] || c.status}
-                      </Badge>
+                      <div className="flex items-center gap-2 mt-1">
+                        <Badge variant="secondary" className={statusColors[c.status] || ""}>
+                          {statusLabels[c.status] || c.status}
+                        </Badge>
+                        {c.followup_enabled && (
+                          <Badge variant="outline" className="text-[10px]">
+                            <RefreshCw className="h-3 w-3 mr-1" />
+                            Follow-up
+                          </Badge>
+                        )}
+                      </div>
                     </div>
                     <div className="flex gap-1">
                       {c.status === "active" && (
@@ -296,6 +342,9 @@ const Campaigns = () => {
                 <TabsTrigger value="message" className="gap-2">
                   <MessageSquare className="h-4 w-4" /> Mensagem
                 </TabsTrigger>
+                <TabsTrigger value="followup" className="gap-2">
+                  <RefreshCw className="h-4 w-4" /> Follow-up
+                </TabsTrigger>
                 <TabsTrigger value="survey" className="gap-2">
                   <HelpCircle className="h-4 w-4" /> Pesquisa
                 </TabsTrigger>
@@ -321,6 +370,74 @@ const Campaigns = () => {
                   <div className="rounded-lg bg-muted p-3">
                     <p className="text-xs text-muted-foreground mb-1">Preview:</p>
                     <p className="text-sm whitespace-pre-wrap">{previewMessage}</p>
+                  </div>
+                )}
+              </TabsContent>
+
+              <TabsContent value="followup" className="space-y-4 pt-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label>Ativar follow-up automático</Label>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Envia lembretes automáticos para quem não respondeu
+                    </p>
+                  </div>
+                  <Switch
+                    checked={editFollowupEnabled}
+                    onCheckedChange={setEditFollowupEnabled}
+                  />
+                </div>
+
+                {editFollowupEnabled && (
+                  <div className="space-y-4">
+                    {editFollowupMessages.map((fm, i) => (
+                      <div key={i} className="rounded-lg border p-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <Label>Lembrete {i + 1}</Label>
+                          <Button variant="ghost" size="sm" onClick={() => removeFollowupMessage(i)}>
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-xs text-muted-foreground">Enviar após (dias)</Label>
+                          <Input
+                            type="number"
+                            min={1}
+                            max={30}
+                            value={fm.delay_days}
+                            onChange={(e) => updateFollowupMessage(i, "delay_days", parseInt(e.target.value) || 1)}
+                            className="w-24"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-xs text-muted-foreground">Mensagem</Label>
+                          <Textarea
+                            placeholder="Oi {{nome}}, ainda estamos por aqui..."
+                            className="min-h-[80px]"
+                            value={fm.template}
+                            onChange={(e) => updateFollowupMessage(i, "template", e.target.value)}
+                          />
+                        </div>
+                        {fm.template && (
+                          <div className="rounded-lg bg-muted p-3">
+                            <p className="text-xs text-muted-foreground mb-1">Preview:</p>
+                            <p className="text-sm whitespace-pre-wrap">{previewFollowup(fm.template)}</p>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+
+                    {editFollowupMessages.length < 2 && (
+                      <Button variant="outline" size="sm" onClick={addFollowupMessage}>
+                        <Plus className="mr-2 h-4 w-4" /> Adicionar Lembrete
+                      </Button>
+                    )}
+
+                    {editFollowupMessages.length === 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        Adicione até 2 lembretes automáticos. Leads que responderam não receberão follow-ups.
+                      </p>
+                    )}
                   </div>
                 )}
               </TabsContent>

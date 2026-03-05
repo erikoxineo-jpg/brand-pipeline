@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -66,6 +66,32 @@ const Dispatches = () => {
       return data;
     },
     enabled: !!workspaceId,
+  });
+
+  // Fetch last inbound message per lead for dispatches
+  const leadIds = useMemo(() => [...new Set(dispatches.map((d: any) => d.lead_id))], [dispatches]);
+  const { data: lastReplies = {} } = useQuery({
+    queryKey: ["last-replies", leadIds],
+    queryFn: async () => {
+      if (!leadIds.length) return {};
+      // Fetch the most recent inbound message for each lead
+      const { data, error } = await supabase
+        .from("messages")
+        .select("lead_id, body, created_at")
+        .in("lead_id", leadIds)
+        .eq("direction", "inbound")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      // Keep only the latest per lead
+      const map: Record<string, string> = {};
+      for (const msg of data || []) {
+        if (!map[msg.lead_id]) {
+          map[msg.lead_id] = msg.body;
+        }
+      }
+      return map;
+    },
+    enabled: leadIds.length > 0,
   });
 
   // Real-time subscription for dispatch status updates
@@ -216,17 +242,18 @@ const Dispatches = () => {
                 <TableHead>Campanha</TableHead>
                 <TableHead>Enviado em</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>Última Resposta</TableHead>
                 <TableHead className="w-20">Ação</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Carregando...</TableCell>
+                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">Carregando...</TableCell>
                 </TableRow>
               ) : filtered.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Nenhum disparo encontrado</TableCell>
+                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">Nenhum disparo encontrado</TableCell>
                 </TableRow>
               ) : (
                 filtered.map((dispatch: any) => {
@@ -249,6 +276,11 @@ const Dispatches = () => {
                       </TableCell>
                       <TableCell>
                         <Badge variant="secondary" className={st.className}>{st.label}</Badge>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground text-xs max-w-[200px] truncate">
+                        {lastReplies[dispatch.lead_id]
+                          ? lastReplies[dispatch.lead_id].slice(0, 50) + (lastReplies[dispatch.lead_id].length > 50 ? "..." : "")
+                          : "—"}
                       </TableCell>
                       <TableCell>
                         {dispatch.status === "pending" && (

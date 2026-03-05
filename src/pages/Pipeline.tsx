@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Phone, Clock, X } from "lucide-react";
+import { Phone, Clock, X, MessageSquare } from "lucide-react";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle,
-} from "@/components/ui/dialog";
+  Sheet, SheetContent, SheetHeader, SheetTitle,
+} from "@/components/ui/sheet";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   DndContext, closestCenter, DragEndEvent, DragOverlay, DragStartEvent,
@@ -41,6 +41,16 @@ const stageColorDot: Record<string, string> = {
   optout: "bg-destructive",
 };
 
+const stageBadgeColors: Record<string, string> = {
+  imported: "bg-secondary text-secondary-foreground",
+  eligible: "bg-warning/10 text-warning",
+  ready: "bg-primary/10 text-primary",
+  contacted: "bg-chart-4/10 text-chart-4",
+  replied: "bg-success/10 text-success",
+  reactivated: "bg-success/10 text-success",
+  optout: "bg-destructive/10 text-destructive",
+};
+
 type Lead = {
   id: string;
   name: string | null;
@@ -50,6 +60,14 @@ type Lead = {
   email: string | null;
   last_purchase: string | null;
   opt_out: boolean;
+};
+
+type Message = {
+  id: string;
+  direction: string;
+  body: string;
+  status: string;
+  created_at: string;
 };
 
 function DroppableColumn({ stageId, children }: { stageId: string; children: React.ReactNode }) {
@@ -99,6 +117,96 @@ function DraggableCard({ lead, onClick }: { lead: Lead; onClick: () => void }) {
   );
 }
 
+function ChatThread({ leadId, workspaceId }: { leadId: string; workspaceId: string }) {
+  const queryClient = useQueryClient();
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  const { data: messages = [], isLoading } = useQuery({
+    queryKey: ["lead-messages", leadId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("messages")
+        .select("id, direction, body, status, created_at")
+        .eq("lead_id", leadId)
+        .order("created_at", { ascending: true });
+      if (error) throw error;
+      return data as Message[];
+    },
+  });
+
+  // Real-time subscription for new messages
+  useEffect(() => {
+    const channel = supabase
+      .channel(`messages-lead-${leadId}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "messages", filter: `lead_id=eq.${leadId}` },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ["lead-messages", leadId] });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [leadId, queryClient]);
+
+  // Auto-scroll to bottom when messages change
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages]);
+
+  if (isLoading) {
+    return <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">Carregando...</div>;
+  }
+
+  if (messages.length === 0) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground gap-2">
+        <MessageSquare className="h-8 w-8" />
+        <p className="text-sm">Nenhuma mensagem ainda</p>
+      </div>
+    );
+  }
+
+  return (
+    <div ref={scrollRef} className="flex-1 overflow-y-auto space-y-3 p-4">
+      {messages.map((msg) => {
+        const isOutbound = msg.direction === "outbound";
+        const time = new Date(msg.created_at).toLocaleString("pt-BR", {
+          day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
+        });
+        return (
+          <div key={msg.id} className={`flex ${isOutbound ? "justify-end" : "justify-start"}`}>
+            <div
+              className={`max-w-[80%] rounded-lg px-3 py-2 text-sm ${
+                isOutbound
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted text-foreground"
+              }`}
+            >
+              <p className="whitespace-pre-wrap break-words">{msg.body}</p>
+              <p className={`text-[10px] mt-1 ${isOutbound ? "text-primary-foreground/70" : "text-muted-foreground"}`}>
+                {time}
+                {isOutbound && msg.status && (
+                  <span className="ml-1">
+                    {msg.status === "sent" && "·"}
+                    {msg.status === "delivered" && "··"}
+                    {msg.status === "read" && "✓✓"}
+                  </span>
+                )}
+              </p>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 const Pipeline = () => {
   const { currentWorkspace } = useAuth();
   const queryClient = useQueryClient();
@@ -126,7 +234,7 @@ const Pipeline = () => {
     enabled: !!workspaceId,
   });
 
-  // Lead dispatches for detail modal
+  // Lead dispatches for detail drawer
   const { data: leadDispatches = [] } = useQuery({
     queryKey: ["lead-dispatches", detailLead?.id],
     queryFn: async () => {
@@ -266,64 +374,74 @@ const Pipeline = () => {
         </DndContext>
       )}
 
-      {/* Lead Detail Modal */}
-      <Dialog open={!!detailLead} onOpenChange={() => setDetailLead(null)}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>{detailLead?.name || "Lead"}</DialogTitle>
-          </DialogHeader>
+      {/* Lead Conversation Drawer */}
+      <Sheet open={!!detailLead} onOpenChange={() => setDetailLead(null)}>
+        <SheetContent className="w-full sm:max-w-md flex flex-col p-0">
           {detailLead && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                <div>
-                  <span className="text-muted-foreground">Telefone:</span>
-                  <p className="font-medium">{detailLead.phone || "—"}</p>
+            <>
+              {/* Header */}
+              <SheetHeader className="px-6 py-4 border-b">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <SheetTitle className="text-base">{detailLead.name || "Lead"}</SheetTitle>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-xs text-muted-foreground">{detailLead.phone || "—"}</span>
+                      <Badge variant="secondary" className={`text-[10px] ${stageBadgeColors[detailLead.stage] || ""}`}>
+                        {stageLabels[detailLead.stage] || detailLead.stage}
+                      </Badge>
+                      {detailLead.days_inactive != null && (
+                        <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+                          <Clock className="h-3 w-3" />
+                          {detailLead.days_inactive}d
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <span className="text-muted-foreground">E-mail:</span>
-                  <p className="font-medium">{detailLead.email || "—"}</p>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Última compra:</span>
-                  <p className="font-medium">{detailLead.last_purchase || "—"}</p>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Dias inativo:</span>
-                  <p className="font-medium">{detailLead.days_inactive ?? "—"}</p>
+              </SheetHeader>
+
+              {/* Lead Info */}
+              <div className="px-6 py-3 border-b">
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div>
+                    <span className="text-muted-foreground">E-mail:</span>
+                    <p className="font-medium">{detailLead.email || "—"}</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Última compra:</span>
+                    <p className="font-medium">{detailLead.last_purchase || "—"}</p>
+                  </div>
                 </div>
               </div>
 
-              <div>
-                <h4 className="text-sm font-medium mb-2">Histórico de Disparos</h4>
+              {/* Chat Thread */}
+              <ChatThread leadId={detailLead.id} workspaceId={workspaceId!} />
+
+              {/* Dispatch History */}
+              <div className="border-t px-6 py-3">
+                <h4 className="text-xs font-medium mb-2 text-muted-foreground">Histórico de Disparos</h4>
                 {leadDispatches.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">Nenhum disparo ainda</p>
+                  <p className="text-xs text-muted-foreground">Nenhum disparo</p>
                 ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="text-xs">Campanha</TableHead>
-                        <TableHead className="text-xs">Status</TableHead>
-                        <TableHead className="text-xs">Data</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {leadDispatches.map((d: any) => (
-                        <TableRow key={d.id}>
-                          <TableCell className="text-xs">{d.campaigns?.name || "—"}</TableCell>
-                          <TableCell className="text-xs">{d.status}</TableCell>
-                          <TableCell className="text-xs">
-                            {d.sent_at ? new Date(d.sent_at).toLocaleString("pt-BR") : "—"}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                  <div className="space-y-1 max-h-32 overflow-y-auto">
+                    {leadDispatches.map((d: any) => (
+                      <div key={d.id} className="flex items-center justify-between text-xs">
+                        <span className="text-muted-foreground truncate">{d.campaigns?.name || "—"}</span>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="secondary" className="text-[10px]">{d.status}</Badge>
+                          <span className="text-muted-foreground">
+                            {d.sent_at ? new Date(d.sent_at).toLocaleDateString("pt-BR") : "—"}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
-            </div>
+            </>
           )}
-        </DialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 };

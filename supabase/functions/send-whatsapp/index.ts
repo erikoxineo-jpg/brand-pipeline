@@ -47,7 +47,7 @@ serve(async (req) => {
     // Fetch dispatches with lead and campaign data
     const { data: dispatches, error: fetchErr } = await supabase
       .from("dispatches")
-      .select("*, leads(name, phone, days_inactive), campaigns(message_template)")
+      .select("*, leads(name, phone, days_inactive), campaigns(message_template, followup_enabled, followup_messages)")
       .in("id", dispatch_ids)
       .eq("status", "pending");
 
@@ -189,6 +189,29 @@ serve(async (req) => {
               whatsapp_message_id: waMessageId,
             })
             .eq("id", dispatch.id);
+
+          // Save outbound message
+          await supabase.from("messages").insert({
+            workspace_id: workspaceId,
+            lead_id: dispatch.lead_id,
+            dispatch_id: dispatch.id,
+            direction: "outbound",
+            body: message,
+            whatsapp_message_id: waMessageId,
+            status: "sent",
+          });
+
+          // Schedule follow-up if enabled
+          const followupMessages = campaign?.followup_messages as any[] || [];
+          const followupIndex = dispatch.followup_index || 0;
+          if (campaign?.followup_enabled && followupMessages.length > followupIndex) {
+            const nextFollowup = followupMessages[followupIndex];
+            const delayDays = nextFollowup?.delay_days || 3;
+            await supabase.from("dispatches").update({
+              next_followup_at: new Date(Date.now() + delayDays * 86400000).toISOString(),
+              followup_index: followupIndex,
+            }).eq("id", dispatch.id);
+          }
 
           // Update lead stage to contacted
           await supabase

@@ -271,6 +271,9 @@ export type Database = {
           offer_value: string | null
           offer_rule: string | null
           target_stages: string[] | null
+          followup_enabled: boolean
+          followup_messages: Json | null
+          followup_interval_days: number
           created_at: string
           updated_at: string
         }
@@ -285,6 +288,9 @@ export type Database = {
           offer_value?: string | null
           offer_rule?: string | null
           target_stages?: string[] | null
+          followup_enabled?: boolean
+          followup_messages?: Json | null
+          followup_interval_days?: number
           created_at?: string
           updated_at?: string
         }
@@ -299,6 +305,9 @@ export type Database = {
           offer_value?: string | null
           offer_rule?: string | null
           target_stages?: string[] | null
+          followup_enabled?: boolean
+          followup_messages?: Json | null
+          followup_interval_days?: number
           created_at?: string
           updated_at?: string
         }
@@ -325,6 +334,8 @@ export type Database = {
           read_at: string | null
           replied_at: string | null
           error_message: string | null
+          followup_index: number
+          next_followup_at: string | null
           created_at: string
         }
         Insert: {
@@ -339,6 +350,8 @@ export type Database = {
           read_at?: string | null
           replied_at?: string | null
           error_message?: string | null
+          followup_index?: number
+          next_followup_at?: string | null
           created_at?: string
         }
         Update: {
@@ -353,6 +366,8 @@ export type Database = {
           read_at?: string | null
           replied_at?: string | null
           error_message?: string | null
+          followup_index?: number
+          next_followup_at?: string | null
           created_at?: string
         }
         Relationships: [
@@ -538,6 +553,64 @@ export type Database = {
             columns: ["workspace_id"]
             isOneToOne: true
             referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      messages: {
+        Row: {
+          id: string
+          workspace_id: string
+          lead_id: string
+          dispatch_id: string | null
+          direction: string
+          body: string
+          whatsapp_message_id: string | null
+          status: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          workspace_id: string
+          lead_id: string
+          dispatch_id?: string | null
+          direction: string
+          body: string
+          whatsapp_message_id?: string | null
+          status?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          workspace_id?: string
+          lead_id?: string
+          dispatch_id?: string | null
+          direction?: string
+          body?: string
+          whatsapp_message_id?: string | null
+          status?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "messages_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "messages_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "messages_dispatch_id_fkey"
+            columns: ["dispatch_id"]
+            isOneToOne: false
+            referencedRelation: "dispatches"
             referencedColumns: ["id"]
           },
         ]

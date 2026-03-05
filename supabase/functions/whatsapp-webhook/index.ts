@@ -90,6 +90,16 @@ serve(async (req) => {
 
           if (!lead) continue;
 
+          // Save inbound message
+          await supabase.from("messages").insert({
+            workspace_id: lead.workspace_id,
+            lead_id: lead.id,
+            direction: "inbound",
+            body: msgText,
+            whatsapp_message_id: msg.id || null,
+            status: "received",
+          });
+
           // Check opt-out
           const isOptOut = OPT_OUT_KEYWORDS.some((kw) =>
             msgText.toLowerCase().includes(kw)
@@ -125,6 +135,7 @@ serve(async (req) => {
               .update({
                 status: "replied",
                 replied_at: new Date().toISOString(),
+                next_followup_at: null,
               })
               .eq("id", dispatch.id);
           }
