@@ -23,7 +23,7 @@ services:
     command: /bin/sh -c "envsubst '$$EVOLUTION_API_KEY' < /etc/nginx/conf.d/default.conf.template > /etc/nginx/conf.d/default.conf && nginx -g 'daemon off;'"
 
   evolution:
-    image: atendai/evolution-api:v2.3.7
+    image: evoapicloud/evolution-api:v2.3.7
     container_name: reconnect-evolution
     restart: unless-stopped
     ports:
