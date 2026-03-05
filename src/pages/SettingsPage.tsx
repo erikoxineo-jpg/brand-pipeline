@@ -124,6 +124,11 @@ const SettingsPage = () => {
     return `rc_${workspaceId.replace(/-/g, "").slice(0, 12)}`;
   }, [workspaceId]);
 
+  const safeJson = async (res: Response) => {
+    const text = await res.text();
+    try { return JSON.parse(text); } catch { return null; }
+  };
+
   const connectEvolution = async () => {
     if (!workspaceId) return;
     setIsConnecting(true);
@@ -135,8 +140,8 @@ const SettingsPage = () => {
     try {
       // Check if instance already exists and is connected
       const checkRes = await fetch(`${EVOLUTION_BASE}/instance/connectionState/${instanceName}`);
-      if (checkRes.ok) {
-        const checkData = await checkRes.json();
+      const checkData = await safeJson(checkRes);
+      if (checkRes.ok && checkData) {
         const state = checkData.instance?.state || checkData.state;
         if (state === "open") {
           // Already connected — just save config
@@ -144,7 +149,7 @@ const SettingsPage = () => {
           setIsConnecting(false);
 
           const infoRes = await fetch(`${EVOLUTION_BASE}/instance/fetchInstances?instanceName=${instanceName}`);
-          const infoData = await infoRes.json();
+          const infoData = await safeJson(infoRes);
           const phone = infoData?.[0]?.ownerJid || "";
           setEvolutionPhone(phone);
 
@@ -152,13 +157,11 @@ const SettingsPage = () => {
           toast.success("WhatsApp já estava conectado!");
           return;
         }
-      }
 
-      // Instance exists but disconnected — try to get QR code via /connect
-      const connectRes = await fetch(`${EVOLUTION_BASE}/instance/connect/${instanceName}`);
-      if (connectRes.ok) {
-        const connectData = await connectRes.json();
-        if (connectData.base64) {
+        // Instance exists but disconnected — try to get QR code via /connect
+        const connectRes = await fetch(`${EVOLUTION_BASE}/instance/connect/${instanceName}`);
+        const connectData = await safeJson(connectRes);
+        if (connectRes.ok && connectData?.base64) {
           setQrCode(connectData.base64);
           startPolling(instanceName);
           return;
@@ -179,11 +182,11 @@ const SettingsPage = () => {
         }),
       });
 
-      const createData = await createRes.json();
+      const createData = await safeJson(createRes);
 
-      if (createData.qrcode?.base64) {
+      if (createData?.qrcode?.base64) {
         setQrCode(createData.qrcode.base64);
-      } else if (createData.instance?.status === "open") {
+      } else if (createData?.instance?.status === "open") {
         setEvolutionStatus("open");
         setIsConnecting(false);
         await saveEvolutionConfig(instanceName, "open", createData.instance?.owner || "");
@@ -191,8 +194,8 @@ const SettingsPage = () => {
       } else {
         await new Promise((r) => setTimeout(r, 2000));
         const retryRes = await fetch(`${EVOLUTION_BASE}/instance/connect/${instanceName}`);
-        const retryData = await retryRes.json();
-        if (retryData.base64) {
+        const retryData = await safeJson(retryRes);
+        if (retryData?.base64) {
           setQrCode(retryData.base64);
         }
       }
