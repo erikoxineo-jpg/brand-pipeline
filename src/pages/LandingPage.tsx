@@ -1,6 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
@@ -141,8 +140,7 @@ const LandingPage = () => {
     business: { name: "Business", price: "R$397" },
   };
 
-  const handleCheckout = useCallback(async (planId: string) => {
-    const { data: { session } } = await supabase.auth.getSession();
+  const handleCheckout = useCallback((planId: string) => {
     if (!session) {
       window.location.href = `/login?plan=${planId}`;
       return;
@@ -152,7 +150,7 @@ const LandingPage = () => {
     if (planInfo) {
       setCheckoutPlan({ planId, ...planInfo });
     }
-  }, []);
+  }, [session]);
 
   // Auto-trigger checkout after login redirect
   useEffect(() => {
