@@ -133,13 +133,42 @@ const SettingsPage = () => {
     setEvolutionInstanceName(instanceName);
 
     try {
-      // Delete any existing stuck instance first
-      await fetch(`${EVOLUTION_BASE}/instance/delete/${instanceName}`, { method: "DELETE" }).catch(() => {});
+      // Check if instance already exists and is connected
+      const checkRes = await fetch(`${EVOLUTION_BASE}/instance/connectionState/${instanceName}`);
+      if (checkRes.ok) {
+        const checkData = await checkRes.json();
+        const state = checkData.instance?.state || checkData.state;
+        if (state === "open") {
+          // Already connected — just save config
+          setEvolutionStatus("open");
+          setIsConnecting(false);
 
-      // Small delay to let the server clean up
+          const infoRes = await fetch(`${EVOLUTION_BASE}/instance/fetchInstances?instanceName=${instanceName}`);
+          const infoData = await infoRes.json();
+          const phone = infoData?.[0]?.ownerJid || "";
+          setEvolutionPhone(phone);
+
+          await saveEvolutionConfig(instanceName, "open", phone);
+          toast.success("WhatsApp já estava conectado!");
+          return;
+        }
+      }
+
+      // Instance exists but disconnected — try to get QR code via /connect
+      const connectRes = await fetch(`${EVOLUTION_BASE}/instance/connect/${instanceName}`);
+      if (connectRes.ok) {
+        const connectData = await connectRes.json();
+        if (connectData.base64) {
+          setQrCode(connectData.base64);
+          startPolling(instanceName);
+          return;
+        }
+      }
+
+      // Instance doesn't exist — delete any leftover and create fresh
+      await fetch(`${EVOLUTION_BASE}/instance/delete/${instanceName}`, { method: "DELETE" }).catch(() => {});
       await new Promise((r) => setTimeout(r, 1000));
 
-      // Create fresh instance with QR code
       const createRes = await fetch(`${EVOLUTION_BASE}/instance/create`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -155,22 +184,19 @@ const SettingsPage = () => {
       if (createData.qrcode?.base64) {
         setQrCode(createData.qrcode.base64);
       } else if (createData.instance?.status === "open") {
-        // Already connected
         setEvolutionStatus("open");
         setIsConnecting(false);
         await saveEvolutionConfig(instanceName, "open", createData.instance?.owner || "");
         return;
       } else {
-        // QR not in create response, try /connect endpoint
         await new Promise((r) => setTimeout(r, 2000));
-        const connectRes = await fetch(`${EVOLUTION_BASE}/instance/connect/${instanceName}`);
-        const connectData = await connectRes.json();
-        if (connectData.base64) {
-          setQrCode(connectData.base64);
+        const retryRes = await fetch(`${EVOLUTION_BASE}/instance/connect/${instanceName}`);
+        const retryData = await retryRes.json();
+        if (retryData.base64) {
+          setQrCode(retryData.base64);
         }
       }
 
-      // Start polling for connection state
       startPolling(instanceName);
     } catch (err: any) {
       toast.error("Erro ao conectar: " + err.message);
