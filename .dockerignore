@@ -1,0 +1,39 @@
+# Dependencias - serao instaladas via npm ci no container
+node_modules
+
+# Build output - sera gerado no container
+dist
+
+# Git - desnecessario no build
+.git
+.gitignore
+
+# Arquivos de ambiente - credenciais nao devem ir para o build
+.env
+.env.local
+.env.*
+
+# Supabase - edge functions e migrations nao fazem parte do frontend
+supabase/
+
+# Documentacao
+*.md
+docs/
+
+# IDE e editor
+.cursor/
+.vscode/
+
+# Logs e arquivos temporarios
+*.log
+bun.lockb
+
+# Scripts de VPS - nao fazem parte do app
+vps/
+
+# Arquivos de teste
+public/leads_teste.xlsx
+src/test/
+
+# Planos e configs do Claude
+.claude/

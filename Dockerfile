@@ -21,11 +21,12 @@ FROM nginx:alpine
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/dist /usr/share/nginx/html
 
-# Download stock video for CAC section (Mixkit free license)
+# Baixar video de fundo (licenca Mixkit gratuita)
 RUN wget -q -O /usr/share/nginx/html/cac-bg.mp4 "https://assets.mixkit.co/videos/42664/42664-720.mp4"
 
-# Remove default nginx static assets
-RUN rm -rf /usr/share/nginx/html/50x.html
+# Remover assets padrao do nginx e esconder versao do servidor
+RUN rm -rf /usr/share/nginx/html/50x.html && \
+    sed -i '/http {/a\    server_tokens off;' /etc/nginx/nginx.conf
 
 EXPOSE 80 443
 
