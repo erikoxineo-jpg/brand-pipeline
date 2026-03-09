@@ -58,6 +58,9 @@ router.post("/signup", async (req: Request, res: Response) => {
     res.status(201).json({
       user: { id: result.user.id, email },
       profile: { display_name: result.profile.display_name, avatar_url: null },
+      workspaces: [{ id: result.workspace.id, name: result.workspace.name, slug: result.workspace.slug, plan: result.workspace.plan }],
+      memberships: [{ workspace_id: result.workspace.id, role: "owner" }],
+      subscription: { plan: "free", status: null, billingType: null, limits: planLimits.free, currentPeriodEnd: null },
       accessToken,
       refreshToken,
     });
@@ -96,7 +99,50 @@ router.post("/login", async (req: Request, res: Response) => {
       },
     });
 
-    res.json({ user: { id: user.id, email: user.email }, accessToken, refreshToken });
+    // Buscar dados completos para o AuthContext
+    const [profile, memberships] = await Promise.all([
+      prisma.profile.findUnique({
+        where: { user_id: user.id },
+        select: { display_name: true, avatar_url: true },
+      }),
+      prisma.workspaceMember.findMany({
+        where: { user_id: user.id },
+        select: { workspace_id: true, role: true },
+      }),
+    ]);
+
+    const workspaceIds = memberships.map((m) => m.workspace_id);
+    const workspaces = workspaceIds.length > 0
+      ? await prisma.workspace.findMany({
+          where: { id: { in: workspaceIds } },
+          select: { id: true, name: true, slug: true, plan: true },
+        })
+      : [];
+
+    let subscription = null;
+    if (workspaces.length > 0) {
+      const sub = await prisma.subscription.findFirst({
+        where: { workspace_id: workspaces[0].id, status: { in: ["active", "overdue", "trial"] } },
+        orderBy: { created_at: "desc" },
+        select: { plan: true, status: true, billing_type: true, current_period_end: true },
+      });
+      if (sub) {
+        subscription = {
+          plan: sub.plan, status: sub.status, billingType: sub.billing_type,
+          limits: planLimits[sub.plan] || planLimits.free, currentPeriodEnd: sub.current_period_end,
+        };
+      }
+    }
+
+    res.json({
+      user: { id: user.id, email: user.email },
+      profile: profile || { display_name: null, avatar_url: null },
+      workspaces,
+      memberships,
+      subscription: subscription || { plan: "free", status: null, billingType: null, limits: planLimits.free, currentPeriodEnd: null },
+      accessToken,
+      refreshToken,
+    });
   } catch (err: any) {
     console.error("Login error:", err.message);
     res.status(500).json({ error: "Erro ao fazer login" });
