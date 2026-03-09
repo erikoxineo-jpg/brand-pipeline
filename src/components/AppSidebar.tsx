@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard,
@@ -13,6 +14,8 @@ import {
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { Badge } from "@/components/ui/badge";
+import { apiFetch } from "@/lib/api/client";
+import { getSocket } from "@/lib/api/socket";
 
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
@@ -35,6 +38,35 @@ const AppSidebar = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { profile, currentWorkspace, currentWorkspaceRole, signOut } = useAuth();
+  const [pendingAiCount, setPendingAiCount] = useState(0);
+
+  useEffect(() => {
+    if (!currentWorkspace?.id) return;
+
+    // Initial fetch
+    apiFetch<any[]>("/dispatches/pending-reviews")
+      .then((reviews) => setPendingAiCount(reviews?.length || 0))
+      .catch(() => {});
+
+    // Real-time updates via Socket.io
+    const socket = getSocket();
+    const handleCount = (data: { count: number }) => {
+      setPendingAiCount(data.count);
+    };
+    const handleDispatchUpdated = () => {
+      apiFetch<any[]>("/dispatches/pending-reviews")
+        .then((reviews) => setPendingAiCount(reviews?.length || 0))
+        .catch(() => {});
+    };
+
+    socket?.on("ai-pending:count", handleCount);
+    socket?.on("dispatch:updated", handleDispatchUpdated);
+
+    return () => {
+      socket?.off("ai-pending:count", handleCount);
+      socket?.off("dispatch:updated", handleDispatchUpdated);
+    };
+  }, [currentWorkspace?.id]);
 
   return (
     <aside className="flex h-screen w-64 flex-col border-r border-border bg-card">
@@ -64,6 +96,11 @@ const AppSidebar = () => {
             >
               <item.icon className="h-4 w-4" />
               {item.name}
+              {item.name === "Disparos" && pendingAiCount > 0 && (
+                <Badge variant="secondary" className="ml-auto bg-warning/10 text-warning text-[10px] px-1.5 py-0">
+                  {pendingAiCount}
+                </Badge>
+              )}
             </button>
           );
         })}

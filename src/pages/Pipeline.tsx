@@ -15,7 +15,8 @@ import { SortableContext, verticalListSortingStrategy, useSortable } from "@dnd-
 import { CSS } from "@dnd-kit/utilities";
 import { useDroppable } from "@dnd-kit/core";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
+import { apiFetch } from "@/lib/api/client";
+import { getSocket } from "@/lib/api/socket";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -144,32 +145,20 @@ function ChatThread({ leadId, workspaceId }: { leadId: string; workspaceId: stri
 
   const { data: messages = [], isLoading } = useQuery({
     queryKey: ["lead-messages", leadId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("messages")
-        .select("id, direction, body, status, created_at")
-        .eq("lead_id", leadId)
-        .order("created_at", { ascending: true });
-      if (error) throw error;
-      return data as Message[];
-    },
+    queryFn: () => apiFetch<Message[]>(`/messages/${leadId}`),
   });
 
-  // Real-time subscription for new messages
+  // Real-time subscription for new messages via Socket.io
   useEffect(() => {
-    const channel = supabase
-      .channel(`messages-lead-${leadId}`)
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "messages", filter: `lead_id=eq.${leadId}` },
-        () => {
-          queryClient.invalidateQueries({ queryKey: ["lead-messages", leadId] });
-        }
-      )
-      .subscribe();
-
+    const socket = getSocket();
+    const handler = (data: any) => {
+      if (data?.lead_id === leadId) {
+        queryClient.invalidateQueries({ queryKey: ["lead-messages", leadId] });
+      }
+    };
+    socket?.on("message:created", handler);
     return () => {
-      supabase.removeChannel(channel);
+      socket?.off("message:created", handler);
     };
   }, [leadId, queryClient]);
 
@@ -242,33 +231,14 @@ const Pipeline = () => {
 
   const { data: leads = [], isLoading } = useQuery({
     queryKey: ["pipeline-leads", workspaceId],
-    queryFn: async () => {
-      if (!workspaceId) return [];
-      const { data, error } = await supabase
-        .from("leads")
-        .select("id, name, phone, days_inactive, stage, email, last_purchase, opt_out, ai_classification, ai_summary")
-        .eq("workspace_id", workspaceId)
-        .in("stage", PIPELINE_STAGES as unknown as string[]);
-      if (error) throw error;
-      return data as Lead[];
-    },
+    queryFn: () => apiFetch<Lead[]>("/pipeline/leads"),
     enabled: !!workspaceId,
   });
 
   // Lead dispatches for detail drawer
   const { data: leadDispatches = [] } = useQuery({
     queryKey: ["lead-dispatches", detailLead?.id],
-    queryFn: async () => {
-      if (!detailLead) return [];
-      const { data, error } = await supabase
-        .from("dispatches")
-        .select("*, campaigns(name)")
-        .eq("lead_id", detailLead.id)
-        .order("created_at", { ascending: false })
-        .limit(10);
-      if (error) throw error;
-      return data;
-    },
+    queryFn: () => apiFetch<any[]>(`/dispatches?lead_id=${detailLead!.id}`),
     enabled: !!detailLead,
   });
 
@@ -276,8 +246,7 @@ const Pipeline = () => {
     mutationFn: async ({ id, stage }: { id: string; stage: string }) => {
       const updates: any = { stage };
       if (stage === "optout") updates.opt_out = true;
-      const { error } = await supabase.from("leads").update(updates).eq("id", id);
-      if (error) throw error;
+      await apiFetch(`/leads/${id}`, { method: "PATCH", body: JSON.stringify(updates) });
     },
     onMutate: async ({ id, stage }) => {
       await queryClient.cancelQueries({ queryKey: ["pipeline-leads", workspaceId] });

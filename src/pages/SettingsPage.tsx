@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Building2, Users, Plus, Pencil, Trash2, Loader2, Wifi, CreditCard, ExternalLink, QrCode, Code, AlertTriangle, CheckCircle2, XCircle, RefreshCw, Smartphone } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
+import { apiFetch } from "@/lib/api/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -83,16 +83,7 @@ const SettingsPage = () => {
   // Load WhatsApp config
   const { data: waConfig } = useQuery({
     queryKey: ["whatsapp-config", workspaceId],
-    queryFn: async () => {
-      if (!workspaceId) return null;
-      const { data, error } = await supabase
-        .from("whatsapp_config")
-        .select("*")
-        .eq("workspace_id", workspaceId)
-        .maybeSingle();
-      if (error) throw error;
-      return data;
-    },
+    queryFn: () => apiFetch<any>("/whatsapp/config").catch(() => null),
     enabled: !!workspaceId,
   });
 
@@ -255,16 +246,19 @@ const SettingsPage = () => {
 
   const saveEvolutionConfig = async (instanceName: string, status: string, phone: string) => {
     if (!workspaceId) return;
-    const { error } = await supabase
-      .from("whatsapp_config")
-      .upsert({
-        workspace_id: workspaceId,
-        provider: "evolution",
-        evolution_instance_name: instanceName,
-        evolution_status: status,
-        evolution_phone: phone,
-      }, { onConflict: "workspace_id" });
-    if (error) console.error("Error saving evolution config:", error);
+    try {
+      await apiFetch("/whatsapp/config", {
+        method: "PUT",
+        body: JSON.stringify({
+          provider: "evolution",
+          evolution_instance_name: instanceName,
+          evolution_status: status,
+          evolution_phone: phone,
+        }),
+      });
+    } catch (err: any) {
+      console.error("Error saving evolution config:", err);
+    }
     queryClient.invalidateQueries({ queryKey: ["whatsapp-config"] });
   };
 
@@ -310,30 +304,9 @@ const SettingsPage = () => {
   // Load workspace members
   const { data: members = [] } = useQuery({
     queryKey: ["workspace-members", workspaceId],
-    queryFn: async () => {
+    queryFn: () => {
       if (!workspaceId) return [];
-      const { data, error } = await supabase
-        .from("workspace_members")
-        .select("id, user_id, role, created_at")
-        .eq("workspace_id", workspaceId);
-      if (error) throw error;
-
-      // Fetch profiles for members
-      const userIds = data.map((m) => m.user_id);
-      const { data: profiles } = await supabase
-        .from("profiles")
-        .select("user_id, display_name, avatar_url")
-        .in("user_id", userIds);
-
-      const profileMap: Record<string, any> = {};
-      for (const p of profiles || []) {
-        profileMap[p.user_id] = p;
-      }
-
-      return data.map((m) => ({
-        ...m,
-        profile: profileMap[m.user_id] || {},
-      }));
+      return apiFetch<any[]>(`/workspaces/${workspaceId}/members`);
     },
     enabled: !!workspaceId,
   });
@@ -341,17 +314,7 @@ const SettingsPage = () => {
   // Load payments history
   const { data: payments = [] } = useQuery({
     queryKey: ["payments", workspaceId],
-    queryFn: async () => {
-      if (!workspaceId) return [];
-      const { data, error } = await supabase
-        .from("payments")
-        .select("*")
-        .eq("workspace_id", workspaceId)
-        .order("created_at", { ascending: false })
-        .limit(20);
-      if (error) throw error;
-      return data;
-    },
+    queryFn: () => apiFetch<any[]>("/payments").catch(() => []),
     enabled: !!workspaceId,
   });
 
@@ -359,11 +322,10 @@ const SettingsPage = () => {
   const saveBrandMutation = useMutation({
     mutationFn: async () => {
       if (!workspaceId) throw new Error("No workspace");
-      const { error } = await supabase
-        .from("workspaces")
-        .update({ name: brandName })
-        .eq("id", workspaceId);
-      if (error) throw error;
+      await apiFetch(`/workspaces/${workspaceId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ name: brandName }),
+      });
     },
     onSuccess: () => {
       toast.success("Configurações salvas");
@@ -376,19 +338,16 @@ const SettingsPage = () => {
   const saveWhatsAppMutation = useMutation({
     mutationFn: async () => {
       if (!workspaceId) throw new Error("No workspace");
-      const configData = {
-        workspace_id: workspaceId,
-        provider: "meta" as const,
-        phone_number_id: waPhoneNumberId || null,
-        waba_id: waWabaId || null,
-        access_token: waAccessToken || null,
-        verify_token: waVerifyToken || null,
-      };
-
-      const { error } = await supabase
-        .from("whatsapp_config")
-        .upsert(configData, { onConflict: "workspace_id" });
-      if (error) throw error;
+      await apiFetch("/whatsapp/config", {
+        method: "PUT",
+        body: JSON.stringify({
+          provider: "meta",
+          phone_number_id: waPhoneNumberId || null,
+          waba_id: waWabaId || null,
+          access_token: waAccessToken || null,
+          verify_token: waVerifyToken || null,
+        }),
+      });
     },
     onSuccess: () => {
       toast.success("WhatsApp configurado");
@@ -401,21 +360,10 @@ const SettingsPage = () => {
   const inviteMutation = useMutation({
     mutationFn: async () => {
       if (!workspaceId) throw new Error("No workspace");
-
-      // Look up user by email in auth (we need their user_id)
-      // Since we can't query auth.users from client, we check profiles
-      // The user must already exist in the system
-      const { data: profiles, error: profileErr } = await supabase
-        .from("profiles")
-        .select("user_id")
-        .limit(100);
-
-      if (profileErr) throw profileErr;
-
-      // We need to find by email which is in auth.users - not directly accessible from client
-      // Workaround: just inform the user the invited person must already have an account
-      toast.info("O usuário precisa ter uma conta. Adicione pelo user_id ou peça que crie uma conta primeiro.");
-      throw new Error("Convite por email ainda não suportado. Use user_id diretamente.");
+      await apiFetch(`/workspaces/${workspaceId}/members`, {
+        method: "POST",
+        body: JSON.stringify({ email: inviteEmail, role: inviteRole }),
+      });
     },
     onSuccess: () => {
       setInviteOpen(false);
@@ -423,21 +371,17 @@ const SettingsPage = () => {
       queryClient.invalidateQueries({ queryKey: ["workspace-members"] });
       toast.success("Membro adicionado");
     },
-    onError: (err: any) => {
-      if (!err.message.includes("ainda não suportado")) {
-        toast.error(err.message);
-      }
-    },
+    onError: (err: any) => toast.error(err.message),
   });
 
   // Update member role
   const updateRoleMutation = useMutation({
     mutationFn: async ({ memberId, role }: { memberId: string; role: string }) => {
-      const { error } = await supabase
-        .from("workspace_members")
-        .update({ role })
-        .eq("id", memberId);
-      if (error) throw error;
+      if (!workspaceId) throw new Error("No workspace");
+      await apiFetch(`/workspaces/${workspaceId}/members/${memberId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ role }),
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["workspace-members"] });
@@ -450,11 +394,8 @@ const SettingsPage = () => {
   // Remove member
   const removeMemberMutation = useMutation({
     mutationFn: async (memberId: string) => {
-      const { error } = await supabase
-        .from("workspace_members")
-        .delete()
-        .eq("id", memberId);
-      if (error) throw error;
+      if (!workspaceId) throw new Error("No workspace");
+      await apiFetch(`/workspaces/${workspaceId}/members/${memberId}`, { method: "DELETE" });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["workspace-members"] });
@@ -694,7 +635,7 @@ const SettingsPage = () => {
                       placeholder="Token customizado para verificação do webhook"
                     />
                     <p className="text-xs text-muted-foreground">
-                      URL do webhook: {`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/whatsapp-webhook`}
+                      URL do webhook: {`${window.location.origin}/api/webhooks/whatsapp`}
                     </p>
                   </div>
                   <Button

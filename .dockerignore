@@ -13,8 +13,9 @@ dist
 .env.local
 .env.*
 
-# Supabase - edge functions e migrations nao fazem parte do frontend
+# Supabase (legado) e backend (build separado)
 supabase/
+server/
 
 # Documentacao
 *.md

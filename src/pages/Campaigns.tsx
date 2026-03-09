@@ -13,10 +13,9 @@ import {
 import { Slider } from "@/components/ui/slider";
 import { Plus, Play, Pause, MessageSquare, HelpCircle, Gift, Loader2, Pencil, Trash2, RefreshCw, Send, Megaphone, Bot } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
+import { apiFetch } from "@/lib/api/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import type { Json } from "@/integrations/supabase/types";
 import CreateDispatchesDialog from "@/components/CreateDispatchesDialog";
 
 const statusLabels: Record<string, string> = {
@@ -63,56 +62,27 @@ const Campaigns = () => {
   const [editAutoDispatch, setEditAutoDispatch] = useState(true);
   const [editAutoRespond, setEditAutoRespond] = useState(false);
   const [editAutoRespondContext, setEditAutoRespondContext] = useState("");
+  const [editAutoRespondMode, setEditAutoRespondMode] = useState("review");
+  const [editAutoRespondAutoClasses, setEditAutoRespondAutoClasses] = useState<string[]>([]);
   const [editMaxDaily, setEditMaxDaily] = useState(100);
 
   const { data: campaigns = [], isLoading } = useQuery({
     queryKey: ["campaigns", workspaceId],
-    queryFn: async () => {
-      if (!workspaceId) return [];
-      const { data, error } = await supabase
-        .from("campaigns")
-        .select("*")
-        .eq("workspace_id", workspaceId)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data;
-    },
+    queryFn: () => apiFetch<any[]>("/campaigns"),
     enabled: !!workspaceId,
   });
 
   // Dispatch stats per campaign
   const { data: dispatchStats = {} } = useQuery({
     queryKey: ["campaign-stats", workspaceId],
-    queryFn: async () => {
-      if (!workspaceId) return {};
-      const { data, error } = await supabase
-        .from("dispatches")
-        .select("campaign_id, status")
-        .eq("workspace_id", workspaceId);
-      if (error) throw error;
-
-      const stats: Record<string, { total: number; sent: number; replied: number }> = {};
-      for (const d of data || []) {
-        if (!d.campaign_id) continue;
-        if (!stats[d.campaign_id]) stats[d.campaign_id] = { total: 0, sent: 0, replied: 0 };
-        stats[d.campaign_id].total++;
-        if (["sent", "delivered", "read", "replied"].includes(d.status)) stats[d.campaign_id].sent++;
-        if (d.status === "replied") stats[d.campaign_id].replied++;
-      }
-      return stats;
-    },
+    queryFn: () => apiFetch<Record<string, { total: number; sent: number; replied: number }>>("/campaigns/stats"),
     enabled: !!workspaceId,
   });
 
   const createMutation = useMutation({
     mutationFn: async () => {
       if (!workspaceId) throw new Error("No workspace");
-      const { error } = await supabase.from("campaigns").insert({
-        workspace_id: workspaceId,
-        name: newName,
-        status: "draft",
-      });
-      if (error) throw error;
+      await apiFetch("/campaigns", { method: "POST", body: JSON.stringify({ name: newName }) });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["campaigns"] });
@@ -125,8 +95,7 @@ const Campaigns = () => {
 
   const toggleStatusMutation = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
-      const { error } = await supabase.from("campaigns").update({ status }).eq("id", id);
-      if (error) throw error;
+      await apiFetch(`/campaigns/${id}`, { method: "PATCH", body: JSON.stringify({ status }) });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["campaigns"] });
@@ -138,20 +107,24 @@ const Campaigns = () => {
   const saveMutation = useMutation({
     mutationFn: async () => {
       if (!editingId) return;
-      const { error } = await supabase.from("campaigns").update({
-        message_template: editTemplate,
-        survey_questions: editQuestions as unknown as Json,
-        offer_type: editOfferType || null,
-        offer_value: editOfferValue || null,
-        offer_rule: editOfferRule || null,
-        followup_enabled: editFollowupEnabled,
-        followup_messages: editFollowupMessages as unknown as Json,
-        auto_dispatch: editAutoDispatch,
-        auto_respond: editAutoRespond,
-        auto_respond_context: editAutoRespondContext || null,
-        max_daily_dispatches: editMaxDaily,
-      }).eq("id", editingId);
-      if (error) throw error;
+      await apiFetch(`/campaigns/${editingId}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          message_template: editTemplate,
+          survey_questions: editQuestions,
+          offer_type: editOfferType || null,
+          offer_value: editOfferValue || null,
+          offer_rule: editOfferRule || null,
+          followup_enabled: editFollowupEnabled,
+          followup_messages: editFollowupMessages,
+          auto_dispatch: editAutoDispatch,
+          auto_respond: editAutoRespond,
+          auto_respond_context: editAutoRespondContext || null,
+          auto_respond_mode: editAutoRespondMode,
+          auto_respond_auto_classes: editAutoRespondAutoClasses,
+          max_daily_dispatches: editMaxDaily,
+        }),
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["campaigns"] });
@@ -162,8 +135,7 @@ const Campaigns = () => {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("campaigns").delete().eq("id", id);
-      if (error) throw error;
+      await apiFetch(`/campaigns/${id}`, { method: "DELETE" });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["campaigns"] });
@@ -189,6 +161,8 @@ const Campaigns = () => {
     setEditAutoDispatch(campaign.auto_dispatch ?? true);
     setEditAutoRespond(campaign.auto_respond ?? false);
     setEditAutoRespondContext(campaign.auto_respond_context || "");
+    setEditAutoRespondMode(campaign.auto_respond_mode || "review");
+    setEditAutoRespondAutoClasses(campaign.auto_respond_auto_classes || []);
     setEditMaxDaily(campaign.max_daily_dispatches ?? 100);
   };
 
@@ -531,17 +505,67 @@ const Campaigns = () => {
                 </div>
 
                 {editAutoRespond && (
-                  <div className="space-y-2">
-                    <Label>Contexto do negócio</Label>
-                    <Textarea
-                      placeholder="Descreva seu negócio para a IA: produtos, preços, horários de funcionamento, endereço, formas de pagamento..."
-                      className="min-h-[100px]"
-                      value={editAutoRespondContext}
-                      onChange={(e) => setEditAutoRespondContext(e.target.value)}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Essas informações ajudam a IA a responder com contexto relevante
-                    </p>
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label>Contexto do negócio</Label>
+                      <Textarea
+                        placeholder="Descreva seu negócio para a IA: produtos, preços, horários de funcionamento, endereço, formas de pagamento..."
+                        className="min-h-[100px]"
+                        value={editAutoRespondContext}
+                        onChange={(e) => setEditAutoRespondContext(e.target.value)}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Essas informações ajudam a IA a responder com contexto relevante
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Modo de resposta</Label>
+                      <select
+                        className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        value={editAutoRespondMode}
+                        onChange={(e) => setEditAutoRespondMode(e.target.value)}
+                      >
+                        <option value="review">Revisar todas (recomendado)</option>
+                        <option value="auto">Enviar automaticamente</option>
+                        <option value="smart">Smart: escolher por tipo</option>
+                      </select>
+                      <p className="text-xs text-muted-foreground">
+                        {editAutoRespondMode === "review" && "Todas as respostas da IA ficam em fila para sua aprovação antes de enviar."}
+                        {editAutoRespondMode === "auto" && "A IA envia respostas automaticamente sem revisão humana."}
+                        {editAutoRespondMode === "smart" && "Escolha quais tipos de resposta enviar automaticamente. Os demais ficam em fila para revisão."}
+                      </p>
+                    </div>
+
+                    {editAutoRespondMode === "smart" && (
+                      <div className="space-y-2 rounded-lg border p-3">
+                        <Label className="text-sm">Enviar automaticamente para:</Label>
+                        {[
+                          { value: "greeting", label: "Saudações (oi, olá, bom dia)" },
+                          { value: "question", label: "Dúvidas sobre produto/serviço" },
+                          { value: "positive", label: "Respostas positivas (interesse)" },
+                        ].map((cls) => (
+                          <label key={cls.value} className="flex items-center gap-2 text-sm">
+                            <input
+                              type="checkbox"
+                              className="rounded border-input"
+                              checked={editAutoRespondAutoClasses.includes(cls.value)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setEditAutoRespondAutoClasses([...editAutoRespondAutoClasses, cls.value]);
+                                } else {
+                                  setEditAutoRespondAutoClasses(editAutoRespondAutoClasses.filter((c) => c !== cls.value));
+                                }
+                              }}
+                            />
+                            {cls.label}
+                          </label>
+                        ))}
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Tipos não marcados ficam em fila para revisão manual
+                        </p>
+                      </div>
+                    )}
                   </div>
                 )}
 

@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Search, Send, Loader2, Users } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { apiFetch } from "@/lib/api/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
@@ -63,13 +63,8 @@ export default function CreateDispatchesDialog({
   const { data: existingLeadIds = new Set<string>() } = useQuery({
     queryKey: ["dispatch-leads", campaignId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("dispatches")
-        .select("lead_id")
-        .eq("campaign_id", campaignId)
-        .eq("workspace_id", workspaceId);
-      if (error) throw error;
-      return new Set((data || []).map((d) => d.lead_id));
+      const data = await apiFetch<any[]>(`/dispatches?campaign=${campaignId}`);
+      return new Set((data || []).map((d: any) => d.lead_id));
     },
     enabled: open,
   });
@@ -79,16 +74,14 @@ export default function CreateDispatchesDialog({
     queryKey: ["available-leads", workspaceId, stageFilter],
     queryFn: async () => {
       if (!stageFilter.length) return [];
-      const { data, error } = await supabase
-        .from("leads")
-        .select("id, name, phone, days_inactive, stage")
-        .eq("workspace_id", workspaceId)
-        .eq("opt_out", false)
-        .in("stage", stageFilter)
-        .order("days_inactive", { ascending: false })
-        .limit(500);
-      if (error) throw error;
-      return data as Lead[];
+      const params = new URLSearchParams();
+      params.set("stages", stageFilter.join(","));
+      params.set("opt_out", "false");
+      params.set("limit", "500");
+      params.set("sort", "days_inactive");
+      params.set("order", "desc");
+      const result = await apiFetch<{ data: Lead[] }>(`/leads?${params}`);
+      return result.data || [];
     },
     enabled: open && stageFilter.length > 0,
   });
@@ -130,20 +123,13 @@ export default function CreateDispatchesDialog({
   const createMutation = useMutation({
     mutationFn: async () => {
       const leadIds = Array.from(selected);
-      const rows = leadIds.map((lead_id) => ({
-        workspace_id: workspaceId,
-        lead_id,
-        campaign_id: campaignId,
-        status: "pending",
-      }));
-
-      // Insert in chunks of 500
-      for (let i = 0; i < rows.length; i += 500) {
-        const { error } = await supabase
-          .from("dispatches")
-          .insert(rows.slice(i, i + 500));
-        if (error) throw error;
-      }
+      await apiFetch("/dispatches", {
+        method: "POST",
+        body: JSON.stringify({
+          campaign_id: campaignId,
+          lead_ids: leadIds,
+        }),
+      });
       return leadIds.length;
     },
     onSuccess: (count) => {

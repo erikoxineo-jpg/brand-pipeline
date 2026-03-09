@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { apiFetch } from "@/lib/api/client";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import {
@@ -131,8 +131,9 @@ export function CheckoutDialog({
 
     setLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke("create-checkout", {
-        body: {
+      const data = await apiFetch<any>("/billing/checkout", {
+        method: "POST",
+        body: JSON.stringify({
           planId,
           billingType: "CREDIT_CARD",
           creditCard: {
@@ -150,11 +151,8 @@ export function CheckoutDialog({
             postalCode: cepDigits,
             addressNumber,
           },
-        },
+        }),
       });
-
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
 
       toast.success("Pagamento aprovado! Bem-vindo ao ReConnect.");
       handleOpenChange(false);
@@ -170,12 +168,10 @@ export function CheckoutDialog({
   async function handlePixGenerate() {
     setLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke("create-checkout", {
-        body: { planId, billingType: "PIX" },
+      const data = await apiFetch<any>("/billing/checkout", {
+        method: "POST",
+        body: JSON.stringify({ planId, billingType: "PIX" }),
       });
-
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
 
       setPixResult({
         pixQrCode: data.pixQrCode,
@@ -193,12 +189,10 @@ export function CheckoutDialog({
   async function handleBoletoGenerate() {
     setLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke("create-checkout", {
-        body: { planId, billingType: "BOLETO" },
+      const data = await apiFetch<any>("/billing/checkout", {
+        method: "POST",
+        body: JSON.stringify({ planId, billingType: "BOLETO" }),
       });
-
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
 
       setBoletoResult({
         bankSlipUrl: data.bankSlipUrl,

@@ -6,14 +6,13 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MessageSquare, Mail, CheckCircle2 } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { Navigate } from "react-router-dom";
 
 const Login = () => {
   const navigate = useNavigate();
-  const { session } = useAuth();
+  const { session, signIn, signUp } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -30,42 +29,39 @@ const Login = () => {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    setLoading(false);
-    if (error) {
-      const msg = error.message === "Invalid login credentials"
-        ? "E-mail ou senha incorretos."
-        : error.message === "Email not confirmed"
-        ? "Confirme seu e-mail antes de entrar. Verifique sua caixa de entrada."
-        : error.message;
-      toast({ title: "Erro ao entrar", description: msg, variant: "destructive" });
-    } else {
+    try {
+      await signIn(email, password);
       toast({ title: "Bem-vindo de volta!", description: "Login realizado com sucesso." });
       navigate(planFromUrl ? `/?autoCheckout=${planFromUrl}` : "/dashboard");
+    } catch (error: any) {
+      const raw = error?.message || "";
+      const msg = raw === "Invalid login credentials" || raw.includes("Invalid")
+        ? "E-mail ou senha incorretos."
+        : raw.includes("Email not confirmed")
+        ? "Confirme seu e-mail antes de entrar. Verifique sua caixa de entrada."
+        : raw;
+      toast({ title: "Erro ao entrar", description: msg, variant: "destructive" });
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    const { error, data } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: { display_name: displayName },
-        emailRedirectTo: window.location.origin,
-      },
-    });
-    setLoading(false);
-    if (error) {
-      const msg = error.message.includes("already registered")
+    try {
+      await signUp(email, password, displayName);
+      // API signup auto-logs in — redirect straight to dashboard
+      toast({ title: "Conta criada!", description: "Bem-vindo ao ReConnect." });
+      navigate(planFromUrl ? `/?autoCheckout=${planFromUrl}` : "/dashboard");
+    } catch (error: any) {
+      const raw = error?.message || "";
+      const msg = raw.includes("already registered") || raw.includes("already exists")
         ? "Este e-mail já está cadastrado. Tente fazer login."
-        : error.message;
+        : raw;
       toast({ title: "Erro ao cadastrar", description: msg, variant: "destructive" });
-    } else if (data.user?.identities?.length === 0) {
-      toast({ title: "E-mail já cadastrado", description: "Este e-mail já possui uma conta. Tente fazer login.", variant: "destructive" });
-    } else {
-      setSignUpSuccess(true);
+    } finally {
+      setLoading(false);
     }
   };
 

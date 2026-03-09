@@ -8,7 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Search, Download, Phone, Mail, ChevronLeft, ChevronRight, Ban, Upload, Users, Trash2, Loader2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
+import { apiFetch } from "@/lib/api/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -52,24 +52,13 @@ const Leads = () => {
     queryKey: ["leads", workspaceId, search, stageFilter, page],
     queryFn: async () => {
       if (!workspaceId) return { leads: [], count: 0 };
-
-      let query = supabase
-        .from("leads")
-        .select("*", { count: "exact" })
-        .eq("workspace_id", workspaceId)
-        .order("created_at", { ascending: false })
-        .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
-
-      if (search) {
-        query = query.or(`name.ilike.%${search}%,phone.ilike.%${search}%`);
-      }
-      if (stageFilter !== "all") {
-        query = query.eq("stage", stageFilter);
-      }
-
-      const { data: leads, error, count } = await query;
-      if (error) throw error;
-      return { leads: leads || [], count: count || 0 };
+      const params = new URLSearchParams();
+      if (search) params.set("search", search);
+      if (stageFilter !== "all") params.set("stage", stageFilter);
+      params.set("page", String(page + 1));
+      params.set("limit", String(PAGE_SIZE));
+      const result = await apiFetch<{ data: any[]; total: number }>(`/leads?${params}`);
+      return { leads: result.data || [], count: result.total || 0 };
     },
     enabled: !!workspaceId,
   });
@@ -90,8 +79,7 @@ const Leads = () => {
       const updates: any = { stage };
       if (stage === "optout") updates.opt_out = true;
       if (stage !== "optout") updates.opt_out = false;
-      const { error } = await supabase.from("leads").update(updates).eq("id", id);
-      if (error) throw error;
+      await apiFetch(`/leads/${id}`, { method: "PATCH", body: JSON.stringify(updates) });
     },
     onSuccess: () => {
       invalidateAll();
@@ -103,12 +91,7 @@ const Leads = () => {
 
   const deleteMutation = useMutation({
     mutationFn: async (ids: string[]) => {
-      // Delete in chunks of 100
-      for (let i = 0; i < ids.length; i += 100) {
-        const chunk = ids.slice(i, i + 100);
-        const { error } = await supabase.from("leads").delete().in("id", chunk);
-        if (error) throw error;
-      }
+      await apiFetch("/leads/bulk", { method: "DELETE", body: JSON.stringify({ ids }) });
       return ids.length;
     },
     onSuccess: (count) => {
@@ -122,16 +105,11 @@ const Leads = () => {
   const deleteAllFilteredMutation = useMutation({
     mutationFn: async () => {
       if (!workspaceId) return 0;
-      let query = supabase.from("leads").delete().eq("workspace_id", workspaceId);
-      if (stageFilter !== "all") {
-        query = query.eq("stage", stageFilter);
-      }
-      if (search) {
-        query = query.or(`name.ilike.%${search}%,phone.ilike.%${search}%`);
-      }
-      const { error, count } = await query.select("id", { count: "exact", head: true });
-      if (error) throw error;
-      return count || 0;
+      const params = new URLSearchParams();
+      if (stageFilter !== "all") params.set("stage", stageFilter);
+      if (search) params.set("search", search);
+      await apiFetch(`/leads/filtered?${params}`, { method: "DELETE" });
+      return 0;
     },
     onSuccess: () => {
       toast.success("Leads excluídos com sucesso");

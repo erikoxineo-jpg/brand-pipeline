@@ -41,12 +41,14 @@ serve(async (req) => {
     let campaignTemplate = "";
     let autoRespondContext = "";
     let autoRespond = false;
+    let autoRespondMode = "review";
+    let autoRespondAutoClasses: string[] = [];
     let campaignId: string | null = null;
 
     if (dispatch_id) {
       const { data: dispatch } = await supabase
         .from("dispatches")
-        .select("campaign_id, campaigns(message_template, auto_respond, auto_respond_context)")
+        .select("campaign_id, campaigns(message_template, auto_respond, auto_respond_context, auto_respond_mode, auto_respond_auto_classes)")
         .eq("id", dispatch_id)
         .single();
 
@@ -56,6 +58,8 @@ serve(async (req) => {
         campaignTemplate = campaign?.message_template || "";
         autoRespond = campaign?.auto_respond || false;
         autoRespondContext = campaign?.auto_respond_context || "";
+        autoRespondMode = campaign?.auto_respond_mode || "review";
+        autoRespondAutoClasses = campaign?.auto_respond_auto_classes || [];
       }
     }
 
@@ -176,85 +180,112 @@ Regras:
         .eq("id", dispatch_id);
     }
 
-    // Auto-respond if enabled
+    // Auto-respond logic: review / auto / smart modes
     if (
       classification.should_auto_respond &&
       autoRespond &&
       classification.suggested_response &&
-      classification.classification !== "opt_out"
+      classification.classification !== "opt_out" &&
+      dispatch_id
     ) {
-      // Get WhatsApp config
-      const { data: waConfig } = await supabase
-        .from("whatsapp_config")
-        .select("*")
-        .eq("workspace_id", workspace_id)
-        .single();
+      // Determine if we should auto-send or queue for review
+      const shouldAutoSend =
+        autoRespondMode === "auto" ||
+        (autoRespondMode === "smart" && autoRespondAutoClasses.includes(classification.classification));
 
-      if (waConfig && lead?.phone) {
-        const provider = waConfig.provider || "meta";
-        let waMessageId: string | null = null;
+      if (shouldAutoSend) {
+        // Send immediately (same logic as before)
+        const { data: waConfig } = await supabase
+          .from("whatsapp_config")
+          .select("*")
+          .eq("workspace_id", workspace_id)
+          .single();
 
-        const EVOLUTION_API_URL = Deno.env.get("EVOLUTION_API_URL") || "https://reconnect.oxineo.com.br/api/evolution";
-        const EVOLUTION_API_KEY = Deno.env.get("EVOLUTION_API_KEY") || "";
+        if (waConfig && lead?.phone) {
+          const provider = waConfig.provider || "meta";
+          let waMessageId: string | null = null;
 
-        try {
-          if (provider === "evolution" && waConfig.evolution_instance_name) {
-            const evoHeaders: Record<string, string> = { "Content-Type": "application/json" };
-            if (EVOLUTION_API_KEY) evoHeaders["apikey"] = EVOLUTION_API_KEY;
-            const evoResponse = await fetch(
-              `${EVOLUTION_API_URL}/message/sendText/${waConfig.evolution_instance_name}`,
-              {
-                method: "POST",
-                headers: evoHeaders,
-                body: JSON.stringify({
-                  number: lead.phone.replace(/\D/g, ""),
-                  text: classification.suggested_response,
-                }),
+          const EVOLUTION_API_URL = Deno.env.get("EVOLUTION_API_URL") || "https://reconnect.oxineo.com.br/api/evolution";
+          const EVOLUTION_API_KEY = Deno.env.get("EVOLUTION_API_KEY") || "";
+
+          try {
+            if (provider === "evolution" && waConfig.evolution_instance_name) {
+              const evoHeaders: Record<string, string> = { "Content-Type": "application/json" };
+              if (EVOLUTION_API_KEY) evoHeaders["apikey"] = EVOLUTION_API_KEY;
+              const evoResponse = await fetch(
+                `${EVOLUTION_API_URL}/message/sendText/${waConfig.evolution_instance_name}`,
+                {
+                  method: "POST",
+                  headers: evoHeaders,
+                  body: JSON.stringify({
+                    number: lead.phone.replace(/\D/g, ""),
+                    text: classification.suggested_response,
+                  }),
+                }
+              );
+              const evoText = await evoResponse.text();
+              let evoResult: any;
+              try { evoResult = JSON.parse(evoText); } catch { evoResult = null; }
+              if (evoResponse.ok && evoResult?.key?.id) {
+                waMessageId = evoResult.key.id;
               }
-            );
-            const evoText = await evoResponse.text();
-            let evoResult: any;
-            try { evoResult = JSON.parse(evoText); } catch { evoResult = null; }
-            if (evoResponse.ok && evoResult?.key?.id) {
-              waMessageId = evoResult.key.id;
-            }
-          } else if (waConfig.phone_number_id && waConfig.access_token) {
-            const waResponse = await fetch(
-              `https://graph.facebook.com/v21.0/${waConfig.phone_number_id}/messages`,
-              {
-                method: "POST",
-                headers: {
-                  Authorization: `Bearer ${waConfig.access_token}`,
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                  messaging_product: "whatsapp",
-                  to: lead.phone.replace(/\D/g, ""),
-                  type: "text",
-                  text: { body: classification.suggested_response },
-                }),
+            } else if (waConfig.phone_number_id && waConfig.access_token) {
+              const waResponse = await fetch(
+                `https://graph.facebook.com/v21.0/${waConfig.phone_number_id}/messages`,
+                {
+                  method: "POST",
+                  headers: {
+                    Authorization: `Bearer ${waConfig.access_token}`,
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify({
+                    messaging_product: "whatsapp",
+                    to: lead.phone.replace(/\D/g, ""),
+                    type: "text",
+                    text: { body: classification.suggested_response },
+                  }),
+                }
+              );
+              const waResult = await waResponse.json();
+              if (waResponse.ok && waResult.messages?.[0]?.id) {
+                waMessageId = waResult.messages[0].id;
               }
-            );
-            const waResult = await waResponse.json();
-            if (waResponse.ok && waResult.messages?.[0]?.id) {
-              waMessageId = waResult.messages[0].id;
             }
-          }
 
-          if (waMessageId) {
-            await supabase.from("messages").insert({
-              workspace_id,
-              lead_id,
-              dispatch_id: dispatch_id || null,
-              direction: "outbound",
-              body: classification.suggested_response,
-              whatsapp_message_id: waMessageId,
-              status: "sent",
-            });
+            if (waMessageId) {
+              await supabase.from("messages").insert({
+                workspace_id,
+                lead_id,
+                dispatch_id: dispatch_id || null,
+                direction: "outbound",
+                body: classification.suggested_response,
+                whatsapp_message_id: waMessageId,
+                status: "sent",
+              });
+            }
+          } catch (sendErr: any) {
+            console.error("Auto-respond send error:", sendErr.message);
           }
-        } catch (sendErr: any) {
-          console.error("Auto-respond send error:", sendErr.message);
         }
+
+        // Mark as auto_sent
+        await supabase
+          .from("dispatches")
+          .update({
+            ai_suggested_response: classification.suggested_response,
+            ai_response_status: "auto_sent",
+            ai_response_sent: classification.suggested_response,
+          })
+          .eq("id", dispatch_id);
+      } else {
+        // Queue for human review (review mode, or smart mode without class match)
+        await supabase
+          .from("dispatches")
+          .update({
+            ai_suggested_response: classification.suggested_response,
+            ai_response_status: "pending_review",
+          })
+          .eq("id", dispatch_id);
       }
     }
 

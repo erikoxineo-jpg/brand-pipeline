@@ -1,6 +1,6 @@
 # =============================================================================
 # ReConnect CRM - Docker Compose (Producao)
-# Descricao: App Nginx + Evolution API + PostgreSQL + Certbot SSL
+# Descricao: Nginx + API Node.js + PostgreSQL + Evolution API + Certbot SSL
 # VPS: reconnect.oxineo.com.br (4 vCPU / 8GB RAM)
 # =============================================================================
 
@@ -8,10 +8,6 @@ services:
   app:
     build:
       context: .
-      args:
-        VITE_SUPABASE_URL: https://xbmhfijiljrwnifeqmei.supabase.co
-        VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_1rKOgC-lCnCsalDejfltHg_KnqBgS46
-        VITE_SUPABASE_PROJECT_ID: xbmhfijiljrwnifeqmei
     container_name: reconnect-app
     restart: unless-stopped
     ports:
@@ -27,6 +23,7 @@ services:
     depends_on:
       - certbot
       - evolution
+      - api
     command: >
       /bin/sh -c "envsubst '$$EVOLUTION_API_KEY' < /etc/nginx/conf.d/default.conf.template
       > /etc/nginx/conf.d/default.conf && nginx -g 'daemon off;'"
@@ -39,6 +36,70 @@ services:
         max-file: "3"
     networks:
       - app-net
+
+  api:
+    build:
+      context: ./server
+    container_name: reconnect-api
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=postgresql://reconnect:${DB_PASSWORD}@db:5432/reconnect
+      - JWT_SECRET=${JWT_SECRET}
+      - EVOLUTION_API_URL=http://evolution:8080
+      - EVOLUTION_API_KEY=${EVOLUTION_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - ASAAS_API_KEY=${ASAAS_API_KEY}
+      - ASAAS_WEBHOOK_TOKEN=${ASAAS_WEBHOOK_TOKEN}
+      - PUBLIC_URL=https://reconnect.oxineo.com.br
+      - NODE_ENV=production
+      - PORT=3001
+    depends_on:
+      db:
+        condition: service_healthy
+    mem_limit: 512m
+    cpus: 1.5
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+    networks:
+      - app-net
+      - db-net
+
+  db:
+    image: postgres:16-alpine
+    container_name: reconnect-db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=reconnect
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_DB=reconnect
+    volumes:
+      - reconnect-pgdata:/var/lib/postgresql/data
+    command: >
+      postgres
+      -c shared_buffers=256MB
+      -c work_mem=8MB
+      -c maintenance_work_mem=128MB
+      -c effective_cache_size=512MB
+      -c max_connections=100
+      -c log_min_duration_statement=1000
+      -c checkpoint_completion_target=0.9
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U reconnect -d reconnect"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    mem_limit: 1g
+    cpus: 1.0
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - db-net
 
   evolution:
     image: evoapicloud/evolution-api:v2.3.7
@@ -59,7 +120,7 @@ services:
       - CACHE_REDIS_PREFIX_KEY=
       - CACHE_LOCAL_ENABLED=true
       - WEBHOOK_GLOBAL_ENABLED=true
-      - WEBHOOK_GLOBAL_URL=https://xbmhfijiljrwnifeqmei.supabase.co/functions/v1/evolution-webhook
+      - WEBHOOK_GLOBAL_URL=https://reconnect.oxineo.com.br/api/webhooks/evolution
       - WEBHOOK_GLOBAL_WEBHOOK_BY_EVENTS=true
       - WEBHOOK_EVENTS_MESSAGES_UPSERT=true
       - WEBHOOK_EVENTS_CONNECTION_UPDATE=true
@@ -138,3 +199,4 @@ volumes:
   certbot-certs:
   evolution-instances:
   evolution-pgdata:
+  reconnect-pgdata:

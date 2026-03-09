@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Users, MessageSquare, TrendingUp, ShoppingCart, ArrowUpRight, CheckCircle2, Circle, Wifi, Upload, Megaphone, Send, X, Bot, Zap } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from "recharts";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
+import { apiFetch } from "@/lib/api/client";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 
@@ -39,53 +39,20 @@ function GettingStartedChecklist({ workspaceId }: { workspaceId: string }) {
 
   const { data: waConfig } = useQuery({
     queryKey: ["checklist-wa", workspaceId],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("whatsapp_config")
-        .select("evolution_status, access_token")
-        .eq("workspace_id", workspaceId)
-        .single();
-      return data;
-    },
+    queryFn: () => apiFetch<{ evolution_status?: string; access_token?: string }>("/whatsapp/config"),
     enabled: !dismissed,
   });
 
-  const { data: leadCount = 0 } = useQuery({
-    queryKey: ["checklist-leads", workspaceId],
-    queryFn: async () => {
-      const { count } = await supabase
-        .from("leads")
-        .select("id", { count: "exact", head: true })
-        .eq("workspace_id", workspaceId);
-      return count || 0;
-    },
+  // Use dashboard stats endpoint for checklist counts
+  const { data: checklistStats } = useQuery({
+    queryKey: ["checklist-stats", workspaceId],
+    queryFn: () => apiFetch<{ leadCount: number; campaignCount: number; dispatchCount: number }>("/dashboard/stats"),
     enabled: !dismissed,
   });
 
-  const { data: campaignCount = 0 } = useQuery({
-    queryKey: ["checklist-campaigns", workspaceId],
-    queryFn: async () => {
-      const { count } = await supabase
-        .from("campaigns")
-        .select("id", { count: "exact", head: true })
-        .eq("workspace_id", workspaceId);
-      return count || 0;
-    },
-    enabled: !dismissed,
-  });
-
-  const { data: dispatchSentCount = 0 } = useQuery({
-    queryKey: ["checklist-dispatches", workspaceId],
-    queryFn: async () => {
-      const { count } = await supabase
-        .from("dispatches")
-        .select("id", { count: "exact", head: true })
-        .eq("workspace_id", workspaceId)
-        .neq("status", "pending");
-      return count || 0;
-    },
-    enabled: !dismissed,
-  });
+  const leadCount = checklistStats?.leadCount || 0;
+  const campaignCount = checklistStats?.campaignCount || 0;
+  const dispatchSentCount = checklistStats?.dispatchCount || 0;
 
   const steps = [
     { label: "Conectar WhatsApp", done: waConfig?.evolution_status === "connected" || !!waConfig?.access_token, href: "/settings", icon: Wifi },
@@ -157,130 +124,61 @@ const Dashboard = () => {
   const { currentWorkspace } = useAuth();
   const workspaceId = currentWorkspace?.id;
 
-  // Lead counts by stage
-  const { data: leadStages = [] } = useQuery({
-    queryKey: ["dashboard-leads", workspaceId],
-    queryFn: async () => {
-      if (!workspaceId) return [];
-      const { data, error } = await supabase
-        .from("leads")
-        .select("stage")
-        .eq("workspace_id", workspaceId);
-      if (error) throw error;
+  // All dashboard stats from a single endpoint
+  interface DashboardStats {
+    leadCount: number;
+    campaignCount: number;
+    dispatchCount: number;
+    leadStages: Record<string, number>;
+    dispatchStatuses: Record<string, number>;
+    weeklyDispatches: { day: string; disparos: number; respostas: number }[];
+    activeCampaigns: number;
+    aiStats: {
+      activeCampaigns: number;
+      sent24h: number;
+      classified24h: number;
+      autoResponded24h: number;
+    };
+  }
 
-      const counts: Record<string, number> = {};
-      for (const lead of data || []) {
-        counts[lead.stage] = (counts[lead.stage] || 0) + 1;
-      }
-
-      return Object.entries(STAGE_LABELS).map(([key, label]) => ({
-        name: label,
-        value: counts[key] || 0,
-        key,
-      }));
-    },
+  const { data: dashboardStats } = useQuery({
+    queryKey: ["dashboard-stats", workspaceId],
+    queryFn: () => apiFetch<DashboardStats>("/dashboard/stats"),
     enabled: !!workspaceId,
   });
 
-  // Dispatch stats
-  const { data: dispatchStats } = useQuery({
-    queryKey: ["dashboard-dispatches", workspaceId],
-    queryFn: async () => {
-      if (!workspaceId) return { today: 0, total: 0, replied: 0, sent: 0 };
+  // Derive leadStages from the stats
+  const leadStages = Object.entries(STAGE_LABELS).map(([key, label]) => ({
+    name: label,
+    value: dashboardStats?.leadStages?.[key] || 0,
+    key,
+  }));
 
-      const todayStart = new Date();
-      todayStart.setHours(0, 0, 0, 0);
+  // Derive dispatch stats
+  const dispatchStats = (() => {
+    if (!dashboardStats) return { today: 0, total: 0, replied: 0, sent: 0 };
+    const statuses = dashboardStats.dispatchStatuses || {};
+    const sent = (statuses.sent || 0) + (statuses.delivered || 0) + (statuses.read || 0) + (statuses.replied || 0);
+    const replied = statuses.replied || 0;
+    const total = Object.values(statuses).reduce((a: number, b: number) => a + b, 0);
+    return { today: 0, total, replied, sent };
+  })();
 
-      const { data, error } = await supabase
-        .from("dispatches")
-        .select("status, sent_at")
-        .eq("workspace_id", workspaceId);
-      if (error) throw error;
+  // Weekly data
+  const weeklyData = dashboardStats?.weeklyDispatches || [];
 
-      let today = 0;
-      let sent = 0;
-      let replied = 0;
-
-      for (const d of data || []) {
-        if (["sent", "delivered", "read", "replied"].includes(d.status)) sent++;
-        if (d.status === "replied") replied++;
-        if (d.sent_at && new Date(d.sent_at) >= todayStart) today++;
-      }
-
-      return { today, total: data?.length || 0, replied, sent };
-    },
-    enabled: !!workspaceId,
-  });
-
-  // Weekly dispatches (last 7 days)
-  const { data: weeklyData = [] } = useQuery({
-    queryKey: ["dashboard-weekly", workspaceId],
-    queryFn: async () => {
-      if (!workspaceId) return [];
-
-      const days = [];
-      for (let i = 6; i >= 0; i--) {
-        const d = new Date();
-        d.setDate(d.getDate() - i);
-        days.push(d.toISOString().slice(0, 10));
-      }
-
-      const startDate = days[0] + "T00:00:00Z";
-      const { data, error } = await supabase
-        .from("dispatches")
-        .select("status, sent_at")
-        .eq("workspace_id", workspaceId)
-        .gte("created_at", startDate);
-      if (error) throw error;
-
-      const dayLabels = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
-
-      return days.map((day) => {
-        const dayDispatches = (data || []).filter(
-          (d) => d.sent_at && d.sent_at.slice(0, 10) === day
-        );
-        const date = new Date(day + "T12:00:00");
-        return {
-          day: dayLabels[date.getDay()],
-          disparos: dayDispatches.length,
-          respostas: dayDispatches.filter((d) => d.status === "replied").length,
-        };
-      });
-    },
-    enabled: !!workspaceId,
-  });
-
-  // Operator performance
+  // Operator performance from workspace members endpoint
   const { data: operatorData = [] } = useQuery({
     queryKey: ["dashboard-operators", workspaceId],
     queryFn: async () => {
       if (!workspaceId) return [];
-
-      // Get all workspace members
-      const { data: members, error: membersErr } = await supabase
-        .from("workspace_members")
-        .select("user_id")
-        .eq("workspace_id", workspaceId);
-      if (membersErr) throw membersErr;
-
-      const userIds = (members || []).map((m) => m.user_id);
-      if (!userIds.length) return [];
-
-      const { data: profiles } = await supabase
-        .from("profiles")
-        .select("user_id, display_name")
-        .in("user_id", userIds);
+      const members = await apiFetch<any[]>(`/workspaces/${workspaceId}/members`);
+      const imports = await apiFetch<any[]>("/imports");
 
       const profileMap: Record<string, string> = {};
-      for (const p of profiles || []) {
-        profileMap[p.user_id] = p.display_name || "Sem nome";
+      for (const m of members || []) {
+        profileMap[m.user_id] = m.profile?.display_name || "Sem nome";
       }
-
-      // Get imports (as a proxy for who created dispatches)
-      const { data: imports } = await supabase
-        .from("imports")
-        .select("created_by, new_leads")
-        .eq("workspace_id", workspaceId);
 
       const opStats: Record<string, { name: string; leads: number }> = {};
       for (const imp of imports || []) {
@@ -299,55 +197,8 @@ const Dashboard = () => {
     enabled: !!workspaceId,
   });
 
-  // Agent stats (automation)
-  const { data: agentStats } = useQuery({
-    queryKey: ["dashboard-agent", workspaceId],
-    queryFn: async () => {
-      if (!workspaceId) return { activeCampaigns: 0, sent24h: 0, classified24h: 0, autoResponded24h: 0 };
-
-      const yesterday = new Date(Date.now() - 86400000).toISOString();
-
-      // Active campaigns with auto_dispatch
-      const { count: activeCampaigns } = await supabase
-        .from("campaigns")
-        .select("id", { count: "exact", head: true })
-        .eq("workspace_id", workspaceId)
-        .eq("status", "active")
-        .eq("auto_dispatch", true);
-
-      // Dispatches sent in last 24h
-      const { count: sent24h } = await supabase
-        .from("dispatches")
-        .select("id", { count: "exact", head: true })
-        .eq("workspace_id", workspaceId)
-        .neq("status", "pending")
-        .gte("sent_at", yesterday);
-
-      // Dispatches with AI classification in last 24h
-      const { count: classified24h } = await supabase
-        .from("dispatches")
-        .select("id", { count: "exact", head: true })
-        .eq("workspace_id", workspaceId)
-        .not("ai_classification", "is", null)
-        .gte("created_at", yesterday);
-
-      // Auto-responded (outbound messages in last 24h that have dispatch_id)
-      const { count: autoResponded24h } = await supabase
-        .from("messages")
-        .select("id", { count: "exact", head: true })
-        .eq("workspace_id", workspaceId)
-        .eq("direction", "outbound")
-        .gte("created_at", yesterday);
-
-      return {
-        activeCampaigns: activeCampaigns || 0,
-        sent24h: sent24h || 0,
-        classified24h: classified24h || 0,
-        autoResponded24h: autoResponded24h || 0,
-      };
-    },
-    enabled: !!workspaceId,
-  });
+  // Agent stats from dashboard stats
+  const agentStats = dashboardStats?.aiStats || { activeCampaigns: 0, sent24h: 0, classified24h: 0, autoResponded24h: 0 };
 
   const totalLeads = leadStages.reduce((sum, s) => sum + s.value, 0);
   const reactivated = leadStages.find((s) => s.key === "reactivated")?.value || 0;

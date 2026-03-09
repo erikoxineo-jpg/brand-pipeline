@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Upload, FileSpreadsheet, CheckCircle2, XCircle, Loader2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
+import { apiFetch } from "@/lib/api/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
@@ -82,16 +82,7 @@ const Imports = () => {
   // Fetch import history
   const { data: importHistory = [] } = useQuery({
     queryKey: ["imports", workspaceId],
-    queryFn: async () => {
-      if (!workspaceId) return [];
-      const { data, error } = await supabase
-        .from("imports")
-        .select("*")
-        .eq("workspace_id", workspaceId)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data;
-    },
+    queryFn: () => apiFetch<any[]>("/imports"),
     enabled: !!workspaceId,
   });
 
@@ -228,79 +219,30 @@ const Imports = () => {
         if (!phone) return null;
         const lastPurchase = purchaseIdx >= 0 ? parseDate(row[purchaseIdx]) : null;
         return {
-          workspace_id: workspaceId,
           name: nameIdx >= 0 ? String(row[nameIdx] || "") : null,
           phone,
           email: emailIdx >= 0 ? String(row[emailIdx] || "") : null,
           last_purchase: lastPurchase,
           days_inactive: calcDaysInactive(lastPurchase),
-          stage: "imported" as const,
         };
       })
       .filter(Boolean) as any[];
 
-    const total = leads.length;
-    let newLeads = 0;
-    let duplicates = 0;
-    let errorMsg: string | null = null;
-
     try {
-      // Batch insert in chunks of 500
-      const chunkSize = 500;
-      for (let i = 0; i < leads.length; i += chunkSize) {
-        const chunk = leads.slice(i, i + chunkSize);
-        const { data, error } = await supabase
-          .from("leads")
-          .upsert(chunk, { onConflict: "workspace_id,phone", ignoreDuplicates: true })
-          .select("id");
-
-        if (error) throw error;
-        newLeads += data?.length || 0;
-      }
-      duplicates = total - newLeads;
-
-      // Create import record
-      await supabase.from("imports").insert({
-        workspace_id: workspaceId,
-        filename: fileName || "unknown.xlsx",
-        total,
-        new_leads: newLeads,
-        duplicates,
-        status: "success",
-        created_by: user.id,
+      const result = await apiFetch<{ new_leads: number; duplicates: number; total: number; eligible?: number }>("/imports", {
+        method: "POST",
+        body: JSON.stringify({ leads, filename: fileName || "unknown.xlsx" }),
       });
 
-      // Auto-mark eligible leads (90+ days inactive)
-      const { count: eligibleCount } = await supabase
-        .from("leads")
-        .update({ stage: "eligible" })
-        .eq("workspace_id", workspaceId)
-        .eq("stage", "imported")
-        .gte("days_inactive", 90)
-        .eq("opt_out", false)
-        .select("id", { count: "exact", head: true });
-
-      const eligibleMsg = eligibleCount ? ` ${eligibleCount} marcados como elegíveis.` : "";
-      toast.success(`Importação concluída: ${newLeads} novos, ${duplicates} duplicatas.${eligibleMsg}`);
+      const eligibleMsg = result.eligible ? ` ${result.eligible} marcados como elegíveis.` : "";
+      toast.success(`Importação concluída: ${result.new_leads} novos, ${result.duplicates} duplicatas.${eligibleMsg}`);
       setFileName(null);
       setRawRows([]);
       setHeaders([]);
       setMappings([]);
       (window as any).__importAllRows = null;
     } catch (err: any) {
-      errorMsg = err.message || "Erro desconhecido";
-      toast.error(`Erro na importação: ${errorMsg}`);
-
-      await supabase.from("imports").insert({
-        workspace_id: workspaceId,
-        filename: fileName || "unknown.xlsx",
-        total,
-        new_leads: newLeads,
-        duplicates,
-        status: "error",
-        error_message: errorMsg,
-        created_by: user.id,
-      });
+      toast.error(`Erro na importação: ${err.message || "Erro desconhecido"}`);
     } finally {
       setImporting(false);
       queryClient.invalidateQueries({ queryKey: ["imports", workspaceId] });
@@ -308,6 +250,8 @@ const Imports = () => {
       queryClient.invalidateQueries({ queryKey: ["pipeline-leads"], refetchType: "all" });
       queryClient.invalidateQueries({ queryKey: ["dashboard-leads"], refetchType: "all" });
       queryClient.invalidateQueries({ queryKey: ["checklist-leads"], refetchType: "all" });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-stats"], refetchType: "all" });
+      queryClient.invalidateQueries({ queryKey: ["checklist-stats"], refetchType: "all" });
     }
   };
 

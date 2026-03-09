@@ -1,9 +1,40 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
-import { Session, User } from "@supabase/supabase-js";
-import { supabase } from "@/integrations/supabase/client";
-import { Database } from "@/integrations/supabase/types";
+// --------------------------------------------------------------------------
+// AuthContext — backed by the REST API + Socket.io.
+// --------------------------------------------------------------------------
 
-type WorkspaceRole = Database["public"]["Enums"]["workspace_role"];
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  useCallback,
+  ReactNode,
+} from "react";
+
+import {
+  apiFetch,
+  setTokens,
+  clearTokens,
+  getAccessToken,
+  setWorkspaceId,
+  getWorkspaceId,
+} from "@/lib/api/client";
+
+import { connectSocket, disconnectSocket } from "@/lib/api/socket";
+
+// ── Types ──────────────────────────────────────────────────────────────────
+
+type WorkspaceRole = "owner" | "admin" | "member";
+
+interface AppUser {
+  id: string;
+  email: string;
+}
+
+interface Profile {
+  display_name: string | null;
+  avatar_url: string | null;
+}
 
 interface Workspace {
   id: string;
@@ -33,10 +64,13 @@ const defaultSubscription: SubscriptionInfo = {
   currentPeriodEnd: null,
 };
 
-interface AuthContextType {
-  session: Session | null;
-  user: User | null;
-  profile: { display_name: string | null; avatar_url: string | null } | null;
+// Public interface — kept compatible with the old Supabase-based context so
+// consumers (pages, components) do not need changes.
+export interface AuthContextType {
+  /** Always null. Kept for backward compatibility with pages that reference `session`. */
+  session: null;
+  user: AppUser | null;
+  profile: Profile | null;
   workspaces: Workspace[];
   currentWorkspace: Workspace | null;
   currentWorkspaceRole: WorkspaceRole | null;
@@ -45,157 +79,231 @@ interface AuthContextType {
   setCurrentWorkspaceId: (id: string) => void;
   loading: boolean;
   signOut: () => Promise<void>;
+  signIn: (email: string, password: string) => Promise<void>;
+  signUp: (email: string, password: string, displayName: string) => Promise<void>;
 }
+
+// ── API response shapes ────────────────────────────────────────────────────
+
+interface AuthMeResponse {
+  user: AppUser;
+  profile: Profile;
+  workspaces: Workspace[];
+  memberships: WorkspaceMembership[];
+  subscription: SubscriptionInfo | null;
+}
+
+interface AuthLoginResponse {
+  accessToken: string;
+  refreshToken: string;
+  user: AppUser;
+  profile: Profile;
+  workspaces: Workspace[];
+  memberships: WorkspaceMembership[];
+  subscription: SubscriptionInfo | null;
+}
+
+interface AuthSignupResponse {
+  accessToken: string;
+  refreshToken: string;
+  user: AppUser;
+  profile: Profile;
+  workspaces: Workspace[];
+  memberships: WorkspaceMembership[];
+  subscription: SubscriptionInfo | null;
+}
+
+// ── Context ────────────────────────────────────────────────────────────────
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// ── Provider ───────────────────────────────────────────────────────────────
+
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [session, setSession] = useState<Session | null>(null);
-  const [user, setUser] = useState<User | null>(null);
-  const [profile, setProfile] = useState<AuthContextType["profile"]>(null);
+  const [user, setUser] = useState<AppUser | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [memberships, setMemberships] = useState<WorkspaceMembership[]>([]);
-  const [currentWorkspaceId, setCurrentWorkspaceId] = useState<string | null>(null);
-  const [subscription, setSubscription] = useState<SubscriptionInfo>(defaultSubscription);
+  const [currentWsId, setCurrentWsId] = useState<string | null>(
+    getWorkspaceId,
+  );
+  const [subscription, setSubscription] =
+    useState<SubscriptionInfo>(defaultSubscription);
   const [loading, setLoading] = useState(true);
 
+  // Derived state
   const currentWorkspace =
-    workspaces.find((w) => w.id === currentWorkspaceId) || workspaces[0] || null;
+    workspaces.find((w) => w.id === currentWsId) || workspaces[0] || null;
   const currentWorkspaceRole =
-    memberships.find((m) => m.workspace_id === currentWorkspace?.id)?.role || null;
+    memberships.find((m) => m.workspace_id === currentWorkspace?.id)?.role ??
+    null;
 
-  const fetchUserData = async (userId: string) => {
-    const profileRes = await supabase
-      .from("profiles")
-      .select("display_name, avatar_url")
-      .eq("user_id", userId)
-      .single();
+  // ── Helpers ────────────────────────────────────────────────────────────
 
-    if (profileRes.data) {
-      setProfile(profileRes.data);
+  /** Apply data returned from /auth/me or login/signup into state. */
+  const applyUserData = useCallback(
+    (data: {
+      user: AppUser;
+      profile: Profile;
+      workspaces: Workspace[];
+      memberships: WorkspaceMembership[];
+      subscription: SubscriptionInfo | null;
+    }) => {
+      setUser(data.user);
+      setProfile(data.profile);
+      setWorkspaces(data.workspaces);
+      setMemberships(data.memberships);
+      setSubscription(data.subscription ?? defaultSubscription);
+
+      // Resolve current workspace id
+      const savedWsId = getWorkspaceId();
+      const validSaved = data.workspaces.some((w) => w.id === savedWsId);
+      const effectiveWsId = validSaved
+        ? savedWsId!
+        : data.workspaces[0]?.id ?? null;
+
+      if (effectiveWsId) {
+        setCurrentWsId(effectiveWsId);
+        setWorkspaceId(effectiveWsId);
+      }
+    },
+    [],
+  );
+
+  /** Connect socket using current token + workspace. */
+  const ensureSocket = useCallback((wsId: string | null) => {
+    const token = getAccessToken();
+    if (token && wsId) {
+      connectSocket(token, wsId);
     }
+  }, []);
 
-    // Ensure the user has at least one workspace; create a default one if needed.
-    const membershipsRes = await supabase
-      .from("workspace_members")
-      .select("workspace_id, role")
-      .eq("user_id", userId);
+  // ── fetchMe ────────────────────────────────────────────────────────────
 
-    if (membershipsRes.error) {
-      // In case the table doesn't exist yet or RLS misconfigured, fail gracefully.
-      return;
-    }
+  const fetchMe = useCallback(async () => {
+    const data = await apiFetch<AuthMeResponse>("/auth/me");
+    applyUserData(data);
+    return data;
+  }, [applyUserData]);
 
-    let effectiveMemberships = membershipsRes.data ?? [];
+  // ── On mount ───────────────────────────────────────────────────────────
 
-    if (!effectiveMemberships.length) {
-      const defaultName =
-        profileRes.data?.display_name || "Meu primeiro workspace";
+  useEffect(() => {
+    let cancelled = false;
 
-      const { error: rpcError } = await supabase
-        .rpc("create_my_workspace", { ws_name: defaultName });
-
-      if (rpcError) {
-        setMemberships([]);
-        setWorkspaces([]);
-        setCurrentWorkspaceId(null);
+    (async () => {
+      const token = getAccessToken();
+      if (!token) {
+        setLoading(false);
         return;
       }
 
-      const refreshedMemberships = await supabase
-        .from("workspace_members")
-        .select("workspace_id, role")
-        .eq("user_id", userId);
+      try {
+        const data = await fetchMe();
+        if (cancelled) return;
 
-      if (refreshedMemberships.data) {
-        effectiveMemberships = refreshedMemberships.data;
+        // Connect socket after data is loaded
+        const savedWsId = getWorkspaceId();
+        const validSaved = data.workspaces.some((w) => w.id === savedWsId);
+        const wsId = validSaved ? savedWsId : data.workspaces[0]?.id ?? null;
+        ensureSocket(wsId);
+      } catch {
+        // fetchMe already handles 401 refresh internally via apiFetch.
+        // If we still end up here the tokens are already cleared.
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-    }
+    })();
 
-    setMemberships(effectiveMemberships);
-
-    const workspaceIds = effectiveMemberships.map((m) => m.workspace_id);
-    if (workspaceIds.length > 0) {
-      const workspacesRes = await supabase
-        .from("workspaces")
-        .select("*")
-        .in("id", workspaceIds);
-
-      if (workspacesRes.data) {
-        setWorkspaces(workspacesRes.data);
-        if (!currentWorkspaceId && workspacesRes.data.length > 0) {
-          setCurrentWorkspaceId(workspacesRes.data[0].id);
-        }
-
-        // Fetch subscription for first workspace
-        const wsId = workspacesRes.data[0]?.id;
-        if (wsId) {
-          const { data: sub } = await supabase
-            .from("subscriptions")
-            .select("plan, status, billing_type, current_period_end")
-            .eq("workspace_id", wsId)
-            .in("status", ["active", "overdue", "trial"])
-            .order("created_at", { ascending: false })
-            .limit(1)
-            .maybeSingle();
-
-          if (sub) {
-            const planLimits: Record<string, { maxLeads: number; maxMessages: number; maxUsers: number }> = {
-              starter: { maxLeads: 500, maxMessages: 1000, maxUsers: 1 },
-              professional: { maxLeads: 2000, maxMessages: 5000, maxUsers: 3 },
-              business: { maxLeads: 10000, maxMessages: 20000, maxUsers: 10 },
-            };
-            setSubscription({
-              plan: sub.plan,
-              status: sub.status,
-              billingType: sub.billing_type,
-              limits: planLimits[sub.plan] || defaultSubscription.limits,
-              currentPeriodEnd: sub.current_period_end,
-            });
-          } else {
-            setSubscription(defaultSubscription);
-          }
-        }
-      }
-    }
-  };
-
-  useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        setTimeout(() => fetchUserData(session.user.id), 0);
-      } else {
-        setProfile(null);
-        setWorkspaces([]);
-        setMemberships([]);
-        setCurrentWorkspaceId(null);
-        setSubscription(defaultSubscription);
-      }
-    });
-
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        fetchUserData(session.user.id).finally(() => setLoading(false));
-      } else {
-        setLoading(false);
-      }
-    });
-
-    return () => subscription.unsubscribe();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const signOut = async () => {
-    await supabase.auth.signOut();
-  };
+  // ── signIn ─────────────────────────────────────────────────────────────
+
+  const signIn = useCallback(
+    async (email: string, password: string) => {
+      const data = await apiFetch<AuthLoginResponse>("/auth/login", {
+        method: "POST",
+        body: JSON.stringify({ email, password }),
+        noAuth: true,
+      });
+
+      setTokens(data.accessToken, data.refreshToken);
+      applyUserData(data);
+
+      const wsId = data.workspaces[0]?.id ?? null;
+      if (wsId) setWorkspaceId(wsId);
+      ensureSocket(wsId);
+    },
+    [applyUserData, ensureSocket],
+  );
+
+  // ── signUp ─────────────────────────────────────────────────────────────
+
+  const signUp = useCallback(
+    async (email: string, password: string, displayName: string) => {
+      const data = await apiFetch<AuthSignupResponse>("/auth/signup", {
+        method: "POST",
+        body: JSON.stringify({ email, password, display_name: displayName }),
+        noAuth: true,
+      });
+
+      setTokens(data.accessToken, data.refreshToken);
+      applyUserData(data);
+
+      const wsId = data.workspaces[0]?.id ?? null;
+      if (wsId) setWorkspaceId(wsId);
+      ensureSocket(wsId);
+    },
+    [applyUserData, ensureSocket],
+  );
+
+  // ── signOut ────────────────────────────────────────────────────────────
+
+  const signOut = useCallback(async () => {
+    try {
+      const refreshToken = localStorage.getItem("refresh_token");
+      if (refreshToken) {
+        await apiFetch("/auth/logout", {
+          method: "POST",
+          body: JSON.stringify({ refreshToken }),
+        });
+      }
+    } catch {
+      // Best-effort — even if the server call fails we still clear local state.
+    }
+
+    clearTokens();
+    disconnectSocket();
+
+    setUser(null);
+    setProfile(null);
+    setWorkspaces([]);
+    setMemberships([]);
+    setCurrentWsId(null);
+    setSubscription(defaultSubscription);
+  }, []);
+
+  // ── setCurrentWorkspaceId ──────────────────────────────────────────────
+
+  const handleSetCurrentWorkspaceId = useCallback(
+    (id: string) => {
+      setCurrentWsId(id);
+      setWorkspaceId(id);
+      ensureSocket(id);
+    },
+    [ensureSocket],
+  );
+
+  // ── Render ─────────────────────────────────────────────────────────────
 
   return (
     <AuthContext.Provider
       value={{
-        session,
+        session: null,
         user,
         profile,
         workspaces,
@@ -203,15 +311,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         currentWorkspaceRole,
         memberships,
         subscription,
-        setCurrentWorkspaceId,
+        setCurrentWorkspaceId: handleSetCurrentWorkspaceId,
         loading,
         signOut,
+        signIn,
+        signUp,
       }}
     >
       {children}
     </AuthContext.Provider>
   );
 };
+
+// ── Hook ───────────────────────────────────────────────────────────────────
 
 export const useAuth = () => {
   const context = useContext(AuthContext);

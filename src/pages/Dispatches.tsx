@@ -3,13 +3,15 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Search, Send, Filter, MessageSquare, Loader2, RefreshCw, Megaphone, Brain } from "lucide-react";
+import { Search, Send, Filter, MessageSquare, Loader2, RefreshCw, Megaphone, Brain, ChevronDown, ChevronUp, Check, X, Pencil } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
+import { apiFetch } from "@/lib/api/client";
+import { getSocket } from "@/lib/api/socket";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -31,6 +33,14 @@ const aiClassConfig: Record<string, { label: string; className: string }> = {
   other: { label: "Outro", className: "bg-secondary text-muted-foreground" },
 };
 
+const aiResponseStatusConfig: Record<string, { label: string; className: string }> = {
+  auto_sent: { label: "Auto", className: "bg-chart-4/10 text-chart-4" },
+  approved: { label: "OK", className: "bg-success/10 text-success" },
+  edited: { label: "Edit", className: "bg-primary/10 text-primary" },
+  rejected: { label: "Rej", className: "bg-destructive/10 text-destructive" },
+  pending_review: { label: "Fila", className: "bg-warning/10 text-warning" },
+};
+
 const Dispatches = () => {
   const { currentWorkspace, session } = useAuth();
   const queryClient = useQueryClient();
@@ -41,87 +51,76 @@ const Dispatches = () => {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [campaignFilter, setCampaignFilter] = useState<string>("all");
+  const [reviewOpen, setReviewOpen] = useState(true);
+  const [editingReview, setEditingReview] = useState<string | null>(null);
+  const [editText, setEditText] = useState("");
 
   const { data: dispatches = [], isLoading } = useQuery({
     queryKey: ["dispatches", workspaceId, search, statusFilter, campaignFilter],
     queryFn: async () => {
       if (!workspaceId) return [];
-      let query = supabase
-        .from("dispatches")
-        .select("*, leads(name, phone), campaigns(name)")
-        .eq("workspace_id", workspaceId)
-        .order("created_at", { ascending: false })
-        .limit(100);
-
-      if (statusFilter !== "all") {
-        query = query.eq("status", statusFilter);
-      }
-      if (campaignFilter !== "all") {
-        query = query.eq("campaign_id", campaignFilter);
-      }
-      const { data, error } = await query;
-      if (error) throw error;
-      return data;
+      const params = new URLSearchParams();
+      if (statusFilter !== "all") params.set("status", statusFilter);
+      if (campaignFilter !== "all") params.set("campaign", campaignFilter);
+      if (search) params.set("search", search);
+      return apiFetch<any[]>(`/dispatches?${params}`);
     },
     enabled: !!workspaceId,
   });
 
   const { data: campaigns = [] } = useQuery({
     queryKey: ["campaigns-list", workspaceId],
-    queryFn: async () => {
-      if (!workspaceId) return [];
-      const { data, error } = await supabase
-        .from("campaigns")
-        .select("id, name")
-        .eq("workspace_id", workspaceId);
-      if (error) throw error;
-      return data;
-    },
+    queryFn: () => apiFetch<any[]>("/campaigns"),
     enabled: !!workspaceId,
   });
 
-  // Fetch last inbound message per lead for dispatches
-  const leadIds = useMemo(() => [...new Set(dispatches.map((d: any) => d.lead_id))], [dispatches]);
-  const { data: lastReplies = {} } = useQuery({
-    queryKey: ["last-replies", leadIds],
-    queryFn: async () => {
-      if (!leadIds.length) return {};
-      // Fetch the most recent inbound message for each lead
-      const { data, error } = await supabase
-        .from("messages")
-        .select("lead_id, body, created_at")
-        .in("lead_id", leadIds)
-        .eq("direction", "inbound")
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      // Keep only the latest per lead
-      const map: Record<string, string> = {};
-      for (const msg of data || []) {
-        if (!map[msg.lead_id]) {
-          map[msg.lead_id] = msg.body;
-        }
-      }
-      return map;
-    },
-    enabled: leadIds.length > 0,
+  // Fetch pending AI reviews
+  const { data: pendingReviews = [] } = useQuery({
+    queryKey: ["pending-ai-reviews", workspaceId],
+    queryFn: () => apiFetch<any[]>("/dispatches/pending-reviews"),
+    enabled: !!workspaceId,
   });
 
-  // Real-time subscription for dispatch status updates
+  // AI review action mutation
+  const aiReviewMutation = useMutation({
+    mutationFn: async ({ dispatch_id, action, response_text }: { dispatch_id: string; action: string; response_text?: string }) => {
+      return apiFetch("/dispatches/review", {
+        method: "POST",
+        body: JSON.stringify({ dispatch_id, action, response_text }),
+      });
+    },
+    onSuccess: (_data: any, variables) => {
+      const labels: Record<string, string> = { approve: "Aprovada", edit: "Editada e enviada", reject: "Rejeitada" };
+      toast.success(`Resposta ${labels[variables.action] || variables.action}`);
+      setEditingReview(null);
+      queryClient.invalidateQueries({ queryKey: ["pending-ai-reviews"] });
+      queryClient.invalidateQueries({ queryKey: ["dispatches"] });
+    },
+    onError: (err: any) => toast.error(`Erro: ${err.message}`),
+  });
+
+  // Use ai_summary from dispatch data instead of fetching messages separately
+  const lastReplies = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const d of dispatches as any[]) {
+      if (d.ai_summary && d.lead_id && !map[d.lead_id]) {
+        map[d.lead_id] = d.ai_summary;
+      }
+    }
+    return map;
+  }, [dispatches]);
+
+  // Real-time subscription for dispatch status updates via Socket.io
   useEffect(() => {
     if (!workspaceId) return;
-    const channel = supabase
-      .channel("dispatches-realtime")
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "dispatches", filter: `workspace_id=eq.${workspaceId}` },
-        () => {
-          queryClient.invalidateQueries({ queryKey: ["dispatches"] });
-        }
-      )
-      .subscribe();
-
+    const socket = getSocket();
+    const handler = () => {
+      queryClient.invalidateQueries({ queryKey: ["dispatches"] });
+      queryClient.invalidateQueries({ queryKey: ["pending-ai-reviews"] });
+    };
+    socket?.on("dispatch:updated", handler);
     return () => {
-      supabase.removeChannel(channel);
+      socket?.off("dispatch:updated", handler);
     };
   }, [workspaceId, queryClient]);
 
@@ -144,11 +143,10 @@ const Dispatches = () => {
 
   const sendMutation = useMutation({
     mutationFn: async (ids: string[]) => {
-      const { data, error } = await supabase.functions.invoke("send-whatsapp", {
-        body: { dispatch_ids: ids },
+      return apiFetch<any>("/dispatches/send", {
+        method: "POST",
+        body: JSON.stringify({ dispatch_ids: ids }),
       });
-      if (error) throw error;
-      return data;
     },
     onSuccess: (data: any) => {
       const sent = data?.results?.filter((r: any) => r.status === "sent").length || 0;
@@ -165,18 +163,21 @@ const Dispatches = () => {
     sendMutation.mutate(selected);
   };
 
-  const handleRetryFailed = () => {
+  const handleRetryFailed = async () => {
     const failedIds = filtered.filter((d: any) => d.status === "failed").map((d: any) => d.id);
     if (!failedIds.length) return;
 
     // Reset status to pending first, then send
-    Promise.all(
-      failedIds.map((id: string) =>
-        supabase.from("dispatches").update({ status: "pending", error_message: null }).eq("id", id)
-      )
-    ).then(() => {
+    try {
+      await Promise.all(
+        failedIds.map((id: string) =>
+          apiFetch(`/dispatches/${id}`, { method: "PATCH", body: JSON.stringify({ status: "pending", error_message: null }) })
+        )
+      );
       sendMutation.mutate(failedIds);
-    });
+    } catch (err: any) {
+      toast.error(`Erro ao resetar: ${err.message}`);
+    }
   };
 
   if (!currentWorkspace) {
@@ -209,6 +210,122 @@ const Dispatches = () => {
           </Button>
         </div>
       </div>
+
+      {/* AI Review Queue */}
+      {pendingReviews.length > 0 && (
+        <Card className="border-warning/30">
+          <CardHeader className="pb-3">
+            <button
+              onClick={() => setReviewOpen(!reviewOpen)}
+              className="flex w-full items-center justify-between"
+            >
+              <div className="flex items-center gap-2">
+                <Brain className="h-5 w-5 text-warning" />
+                <span className="font-medium text-foreground">
+                  Respostas IA para revisão
+                </span>
+                <Badge variant="secondary" className="bg-warning/10 text-warning">
+                  {pendingReviews.length}
+                </Badge>
+              </div>
+              {reviewOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            </button>
+          </CardHeader>
+          {reviewOpen && (
+            <CardContent className="space-y-3 pt-0">
+              {pendingReviews.map((d: any) => {
+                const cls = aiClassConfig[d.ai_classification] || aiClassConfig.other;
+                const isEditing = editingReview === d.id;
+                return (
+                  <div key={d.id} className="rounded-lg border p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-sm">{d.leads?.name || "Sem nome"}</span>
+                        <span className="text-xs text-muted-foreground">{d.leads?.phone}</span>
+                        <Badge variant="secondary" className={cls.className}>{cls.label}</Badge>
+                      </div>
+                      <span className="text-xs text-muted-foreground">{d.campaigns?.name}</span>
+                    </div>
+
+                    {/* Client message (last reply from messages query) */}
+                    <div className="rounded bg-muted p-2">
+                      <p className="text-xs text-muted-foreground mb-0.5">Mensagem do cliente:</p>
+                      <p className="text-sm">{d.ai_summary || "—"}</p>
+                    </div>
+
+                    {/* AI suggested response */}
+                    {isEditing ? (
+                      <div className="space-y-2">
+                        <p className="text-xs text-muted-foreground">Editar resposta:</p>
+                        <Textarea
+                          value={editText}
+                          onChange={(e) => setEditText(e.target.value)}
+                          className="min-h-[80px]"
+                        />
+                      </div>
+                    ) : (
+                      <div className="rounded bg-primary/5 p-2">
+                        <p className="text-xs text-muted-foreground mb-0.5">Resposta sugerida pela IA:</p>
+                        <p className="text-sm">{d.ai_suggested_response}</p>
+                      </div>
+                    )}
+
+                    {/* Action buttons */}
+                    <div className="flex items-center gap-2 justify-end">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-destructive"
+                        onClick={() => aiReviewMutation.mutate({ dispatch_id: d.id, action: "reject" })}
+                        disabled={aiReviewMutation.isPending}
+                      >
+                        <X className="mr-1 h-3 w-3" /> Rejeitar
+                      </Button>
+                      {isEditing ? (
+                        <>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setEditingReview(null)}
+                          >
+                            Cancelar
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={() => aiReviewMutation.mutate({ dispatch_id: d.id, action: "edit", response_text: editText })}
+                            disabled={aiReviewMutation.isPending || !editText.trim()}
+                          >
+                            {aiReviewMutation.isPending && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
+                            <Send className="mr-1 h-3 w-3" /> Enviar editada
+                          </Button>
+                        </>
+                      ) : (
+                        <>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => { setEditingReview(d.id); setEditText(d.ai_suggested_response || ""); }}
+                          >
+                            <Pencil className="mr-1 h-3 w-3" /> Editar
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={() => aiReviewMutation.mutate({ dispatch_id: d.id, action: "approve" })}
+                            disabled={aiReviewMutation.isPending}
+                          >
+                            {aiReviewMutation.isPending && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
+                            <Check className="mr-1 h-3 w-3" /> Aprovar e Enviar
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </CardContent>
+          )}
+        </Card>
+      )}
 
       <Card>
         <CardHeader className="pb-3">
@@ -308,22 +425,29 @@ const Dispatches = () => {
                         <Badge variant="secondary" className={st.className}>{st.label}</Badge>
                       </TableCell>
                       <TableCell>
-                        {dispatch.ai_classification ? (
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger>
-                                <Badge variant="secondary" className={aiClassConfig[dispatch.ai_classification]?.className || ""}>
-                                  {aiClassConfig[dispatch.ai_classification]?.label || dispatch.ai_classification}
-                                </Badge>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p className="max-w-[200px] text-xs">{dispatch.ai_summary || "Sem resumo"}</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
+                        <div className="flex items-center gap-1">
+                          {dispatch.ai_classification ? (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger>
+                                  <Badge variant="secondary" className={aiClassConfig[dispatch.ai_classification]?.className || ""}>
+                                    {aiClassConfig[dispatch.ai_classification]?.label || dispatch.ai_classification}
+                                  </Badge>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p className="max-w-[200px] text-xs">{dispatch.ai_summary || "Sem resumo"}</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                          {dispatch.ai_response_status && aiResponseStatusConfig[dispatch.ai_response_status] && (
+                            <Badge variant="outline" className={`text-[10px] px-1 py-0 ${aiResponseStatusConfig[dispatch.ai_response_status].className}`}>
+                              {aiResponseStatusConfig[dispatch.ai_response_status].label}
+                            </Badge>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell className="text-muted-foreground text-xs max-w-[200px] truncate">
                         {lastReplies[dispatch.lead_id]

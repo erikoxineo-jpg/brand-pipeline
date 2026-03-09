@@ -1,0 +1,249 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String           @id @default(uuid()) @db.Uuid
+  email         String           @unique
+  password_hash String
+  created_at    DateTime         @default(now())
+  profile       Profile?
+  members       WorkspaceMember[]
+  refresh_tokens RefreshToken[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id         String   @id @default(uuid()) @db.Uuid
+  user_id    String   @db.Uuid
+  token_hash String   @unique
+  expires_at DateTime
+  created_at DateTime @default(now())
+  user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
+}
+
+model Profile {
+  id           String   @id @default(uuid()) @db.Uuid
+  user_id      String   @unique @db.Uuid
+  display_name String?
+  avatar_url   String?
+  created_at   DateTime @default(now())
+  updated_at   DateTime @default(now()) @updatedAt
+  user         User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("profiles")
+}
+
+model Workspace {
+  id              String            @id @default(uuid()) @db.Uuid
+  name            String
+  slug            String?           @unique
+  plan            String            @default("free")
+  created_at      DateTime          @default(now())
+  members         WorkspaceMember[]
+  leads           Lead[]
+  imports         Import[]
+  campaigns       Campaign[]
+  dispatches      Dispatch[]
+  messages        Message[]
+  whatsapp_config WhatsappConfig?
+  subscriptions   Subscription[]
+  payments        Payment[]
+
+  @@map("workspaces")
+}
+
+model WorkspaceMember {
+  id           String   @id @default(uuid()) @db.Uuid
+  workspace_id String   @db.Uuid
+  user_id      String   @db.Uuid
+  role         String   @default("member")
+  created_at   DateTime @default(now())
+  workspace    Workspace @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+  user         User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([workspace_id, user_id])
+  @@map("workspace_members")
+}
+
+model Lead {
+  id                String     @id @default(uuid()) @db.Uuid
+  workspace_id      String     @db.Uuid
+  name              String?
+  phone             String?
+  email             String?
+  last_purchase     String?
+  days_inactive     Int?
+  stage             String     @default("imported")
+  opt_out           Boolean    @default(false)
+  metadata          Json?
+  ai_classification String?
+  ai_summary        String?
+  created_at        DateTime   @default(now())
+  updated_at        DateTime   @default(now()) @updatedAt
+  workspace         Workspace  @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+  dispatches        Dispatch[]
+  messages          Message[]
+
+  @@unique([workspace_id, phone])
+  @@index([workspace_id, stage])
+  @@map("leads")
+}
+
+model Import {
+  id            String    @id @default(uuid()) @db.Uuid
+  workspace_id  String    @db.Uuid
+  filename      String
+  total         Int       @default(0)
+  new_leads     Int       @default(0)
+  duplicates    Int       @default(0)
+  status        String    @default("pending")
+  error_message String?
+  created_by    String?   @db.Uuid
+  created_at    DateTime  @default(now())
+  workspace     Workspace @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+
+  @@map("imports")
+}
+
+model Campaign {
+  id                        String     @id @default(uuid()) @db.Uuid
+  workspace_id              String     @db.Uuid
+  name                      String
+  status                    String     @default("draft")
+  message_template          String?
+  survey_questions          Json?
+  offer_type                String?
+  offer_value               String?
+  offer_rule                String?
+  target_stages             String[]   @default([])
+  followup_enabled          Boolean    @default(false)
+  followup_messages         Json?
+  followup_interval_days    Int        @default(3)
+  auto_dispatch             Boolean    @default(false)
+  auto_respond              Boolean    @default(false)
+  auto_respond_context      String?
+  auto_respond_mode         String     @default("review")
+  auto_respond_auto_classes String[]   @default([])
+  max_daily_dispatches      Int        @default(100)
+  created_at                DateTime   @default(now())
+  updated_at                DateTime   @default(now()) @updatedAt
+  workspace                 Workspace  @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+  dispatches                Dispatch[]
+
+  @@map("campaigns")
+}
+
+model Dispatch {
+  id                    String    @id @default(uuid()) @db.Uuid
+  workspace_id          String    @db.Uuid
+  lead_id               String    @db.Uuid
+  campaign_id           String?   @db.Uuid
+  whatsapp_message_id   String?
+  status                String    @default("pending")
+  sent_at               DateTime?
+  delivered_at          DateTime?
+  read_at               DateTime?
+  replied_at            DateTime?
+  error_message         String?
+  followup_index        Int       @default(0)
+  next_followup_at      DateTime?
+  ai_classification     String?
+  ai_confidence         Float?
+  ai_summary            String?
+  ai_suggested_response String?
+  ai_response_status    String?
+  ai_response_sent      String?
+  ai_reviewed_at        DateTime?
+  ai_reviewed_by        String?   @db.Uuid
+  created_at            DateTime  @default(now())
+  workspace             Workspace  @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+  lead                  Lead       @relation(fields: [lead_id], references: [id], onDelete: Cascade)
+  campaign              Campaign?  @relation(fields: [campaign_id], references: [id], onDelete: SetNull)
+  messages              Message[]
+
+  @@index([workspace_id, status])
+  @@index([workspace_id, ai_response_status])
+  @@map("dispatches")
+}
+
+model Message {
+  id                  String    @id @default(uuid()) @db.Uuid
+  workspace_id        String    @db.Uuid
+  lead_id             String    @db.Uuid
+  dispatch_id         String?   @db.Uuid
+  direction           String
+  body                String
+  whatsapp_message_id String?
+  status              String    @default("sent")
+  created_at          DateTime  @default(now())
+  workspace           Workspace  @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+  lead                Lead       @relation(fields: [lead_id], references: [id], onDelete: Cascade)
+  dispatch            Dispatch?  @relation(fields: [dispatch_id], references: [id], onDelete: SetNull)
+
+  @@index([lead_id, created_at])
+  @@map("messages")
+}
+
+model WhatsappConfig {
+  id                      String    @id @default(uuid()) @db.Uuid
+  workspace_id            String    @unique @db.Uuid
+  phone_number_id         String?
+  waba_id                 String?
+  access_token            String?
+  verify_token            String?
+  webhook_secret          String?
+  provider                String    @default("evolution")
+  evolution_instance_name String?
+  evolution_phone         String?
+  evolution_status        String?
+  created_at              DateTime  @default(now())
+  updated_at              DateTime  @default(now()) @updatedAt
+  workspace               Workspace @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+
+  @@map("whatsapp_config")
+}
+
+model Subscription {
+  id                    String    @id @default(uuid()) @db.Uuid
+  workspace_id          String    @db.Uuid
+  asaas_customer_id     String?
+  asaas_subscription_id String?
+  plan                  String    @default("free")
+  status                String    @default("pending")
+  billing_type          String?
+  current_period_start  DateTime?
+  current_period_end    DateTime?
+  created_at            DateTime  @default(now())
+  updated_at            DateTime  @default(now()) @updatedAt
+  workspace             Workspace  @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+  payments              Payment[]
+
+  @@map("subscriptions")
+}
+
+model Payment {
+  id               String        @id @default(uuid()) @db.Uuid
+  workspace_id     String        @db.Uuid
+  subscription_id  String?       @db.Uuid
+  asaas_payment_id String?
+  amount           Float         @default(0)
+  status           String        @default("pending")
+  billing_type     String?
+  paid_at          DateTime?
+  due_date         DateTime?
+  invoice_url      String?
+  created_at       DateTime      @default(now())
+  workspace        Workspace     @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+  subscription     Subscription? @relation(fields: [subscription_id], references: [id], onDelete: SetNull)
+
+  @@map("payments")
+}
