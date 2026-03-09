@@ -10,6 +10,7 @@ router.get("/", async (req: Request, res: Response) => {
     const workspaceId = req.workspaceId!;
     const status = req.query.status as string | undefined;
     const campaignId = req.query.campaign as string | undefined;
+    const leadId = req.query.lead_id as string | undefined;
     const search = (req.query.search as string) || "";
 
     const where: Prisma.DispatchWhereInput = { workspace_id: workspaceId };
@@ -20,6 +21,10 @@ router.get("/", async (req: Request, res: Response) => {
 
     if (campaignId) {
       where.campaign_id = campaignId;
+    }
+
+    if (leadId) {
+      where.lead_id = leadId;
     }
 
     if (search) {
@@ -41,7 +46,14 @@ router.get("/", async (req: Request, res: Response) => {
       take: 100,
     });
 
-    res.json(dispatches);
+    // Map Prisma relation names (singular) to frontend names (plural, Supabase convention)
+    const mapped = dispatches.map(({ lead, campaign, ...rest }) => ({
+      ...rest,
+      leads: lead,
+      campaigns: campaign,
+    }));
+
+    res.json(mapped);
   } catch (err: any) {
     console.error("List dispatches error:", err.message);
     res.status(500).json({ error: "Erro ao listar envios" });
@@ -65,7 +77,13 @@ router.get("/pending-reviews", async (req: Request, res: Response) => {
       orderBy: { created_at: "desc" },
     });
 
-    res.json(dispatches);
+    const mapped = dispatches.map(({ lead, campaign, ...rest }) => ({
+      ...rest,
+      leads: lead,
+      campaigns: campaign,
+    }));
+
+    res.json(mapped);
   } catch (err: any) {
     console.error("Pending reviews error:", err.message);
     res.status(500).json({ error: "Erro ao listar revisões pendentes" });
