@@ -272,6 +272,24 @@ router.post("/checkout", async (req: Request, res: Response) => {
   }
 });
 
+// GET /api/billing/payments — Payment history
+router.get("/payments", async (req: Request, res: Response) => {
+  try {
+    const workspaceId = req.workspaceId!;
+
+    const payments = await prisma.payment.findMany({
+      where: { workspace_id: workspaceId },
+      orderBy: { created_at: "desc" },
+      take: 50,
+    });
+
+    res.json(payments);
+  } catch (err: any) {
+    console.error("List payments error:", err.message);
+    res.status(500).json({ error: "Erro ao listar pagamentos" });
+  }
+});
+
 // GET /api/billing/subscription — Check current subscription
 router.get("/subscription", async (req: Request, res: Response) => {
   try {

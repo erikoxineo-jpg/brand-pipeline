@@ -161,7 +161,7 @@ const Dashboard = () => {
     const sent = (statuses.sent || 0) + (statuses.delivered || 0) + (statuses.read || 0) + (statuses.replied || 0);
     const replied = statuses.replied || 0;
     const total = Object.values(statuses).reduce((a: number, b: number) => a + b, 0);
-    return { today: 0, total, replied, sent };
+    return { today: dashboardStats.dispatchesToday || 0, total, replied, sent };
   })();
 
   // Weekly data

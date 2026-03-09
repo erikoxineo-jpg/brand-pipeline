@@ -141,7 +141,9 @@ export async function apiFetch<T = unknown>(
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     const message =
-      (body as Record<string, unknown>)?.message ?? res.statusText;
+      (body as Record<string, unknown>)?.error ??
+      (body as Record<string, unknown>)?.message ??
+      res.statusText;
     throw new ApiError(res.status, String(message));
   }
 

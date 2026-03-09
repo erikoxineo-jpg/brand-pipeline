@@ -314,7 +314,7 @@ const SettingsPage = () => {
   // Load payments history
   const { data: payments = [] } = useQuery({
     queryKey: ["payments", workspaceId],
-    queryFn: () => apiFetch<any[]>("/payments").catch(() => []),
+    queryFn: () => apiFetch<any[]>("/billing/payments").catch(() => []),
     enabled: !!workspaceId,
   });
 
@@ -684,15 +684,15 @@ const SettingsPage = () => {
               )}
               <div className="grid grid-cols-3 gap-4 rounded-lg border p-4">
                 <div className="text-center">
-                  <p className="text-lg font-semibold">{subscription.limits.maxLeads.toLocaleString("pt-BR")}</p>
+                  <p className="text-lg font-semibold">{(subscription.limits?.maxLeads ?? 50).toLocaleString("pt-BR")}</p>
                   <p className="text-xs text-muted-foreground">Leads</p>
                 </div>
                 <div className="text-center">
-                  <p className="text-lg font-semibold">{subscription.limits.maxMessages.toLocaleString("pt-BR")}</p>
+                  <p className="text-lg font-semibold">{(subscription.limits?.maxMessages ?? 100).toLocaleString("pt-BR")}</p>
                   <p className="text-xs text-muted-foreground">Msgs/mês</p>
                 </div>
                 <div className="text-center">
-                  <p className="text-lg font-semibold">{subscription.limits.maxUsers}</p>
+                  <p className="text-lg font-semibold">{subscription.limits?.maxUsers ?? 1}</p>
                   <p className="text-xs text-muted-foreground">Usuários</p>
                 </div>
               </div>

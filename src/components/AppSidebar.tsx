@@ -29,9 +29,9 @@ const navigation = [
 ];
 
 const roleLabels: Record<string, string> = {
+  owner: "Owner",
   admin: "Admin",
-  gestor: "Gestor",
-  operador: "Operador",
+  member: "Membro",
 };
 
 const AppSidebar = () => {

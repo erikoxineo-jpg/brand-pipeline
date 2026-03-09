@@ -297,4 +297,36 @@ router.post("/review", async (req: Request, res: Response) => {
   }
 });
 
+// PATCH /api/dispatches/:id
+router.patch("/:id", async (req: Request, res: Response) => {
+  try {
+    const workspaceId = req.workspaceId!;
+    const id = req.params.id as string;
+
+    const existing = await prisma.dispatch.findFirst({
+      where: { id, workspace_id: workspaceId },
+    });
+
+    if (!existing) {
+      return res.status(404).json({ error: "Dispatch não encontrado" });
+    }
+
+    const { status, error_message } = req.body;
+
+    const dispatch = await prisma.dispatch.update({
+      where: { id },
+      data: {
+        ...(status !== undefined && { status }),
+        ...(error_message !== undefined && { error_message }),
+      },
+    });
+
+    emitToWorkspace(workspaceId, "dispatch:updated", { id: dispatch.id, status: dispatch.status });
+    res.json({ dispatch });
+  } catch (err: any) {
+    console.error("Update dispatch error:", err.message);
+    res.status(500).json({ error: "Erro ao atualizar dispatch" });
+  }
+});
+
 export default router;

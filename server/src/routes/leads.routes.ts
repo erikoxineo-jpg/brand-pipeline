@@ -4,20 +4,32 @@ import { Prisma } from "@prisma/client";
 
 const router = Router();
 
-// GET /api/leads?search=&stage=&page=1&limit=20
+// GET /api/leads?search=&stage=&stages=&opt_out=&sort=&order=&page=1&limit=20
 router.get("/", async (req: Request, res: Response) => {
   try {
     const workspaceId = req.workspaceId!;
     const search = (req.query.search as string) || "";
     const stage = req.query.stage as string | undefined;
+    const stages = req.query.stages as string | undefined;
+    const optOut = req.query.opt_out as string | undefined;
+    const sort = req.query.sort as string | undefined;
+    const order = (req.query.order as string) || "desc";
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
-    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 20));
+    const limit = Math.min(500, Math.max(1, parseInt(req.query.limit as string) || 20));
     const skip = (page - 1) * limit;
 
     const where: Prisma.LeadWhereInput = { workspace_id: workspaceId };
 
-    if (stage) {
+    if (stages) {
+      where.stage = { in: stages.split(",") };
+    } else if (stage) {
       where.stage = stage;
+    }
+
+    if (optOut === "false") {
+      where.opt_out = false;
+    } else if (optOut === "true") {
+      where.opt_out = true;
     }
 
     if (search) {
@@ -27,10 +39,14 @@ router.get("/", async (req: Request, res: Response) => {
       ];
     }
 
+    const validSortFields = ["created_at", "name", "days_inactive", "stage"];
+    const orderByField = validSortFields.includes(sort || "") ? sort! : "created_at";
+    const orderByDir = order === "asc" ? "asc" : "desc";
+
     const [leads, count] = await Promise.all([
       prisma.lead.findMany({
         where,
-        orderBy: { created_at: "desc" },
+        orderBy: { [orderByField]: orderByDir },
         skip,
         take: limit,
       }),

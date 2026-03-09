@@ -11,11 +11,13 @@ router.get("/stats", async (req: Request, res: Response) => {
     const now = new Date();
     const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
     const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
     const [
       leadCount,
       campaignCount,
       dispatchCount,
+      dispatchesToday,
       leadStagesRaw,
       dispatchStatusesRaw,
       weeklyDispatches,
@@ -36,6 +38,15 @@ router.get("/stats", async (req: Request, res: Response) => {
       // Total de dispatches com status != "pending"
       prisma.dispatch.count({
         where: { workspace_id: workspaceId, status: { not: "pending" } },
+      }),
+
+      // Dispatches enviados hoje
+      prisma.dispatch.count({
+        where: {
+          workspace_id: workspaceId,
+          status: { not: "pending" },
+          sent_at: { gte: todayStart },
+        },
       }),
 
       // Leads agrupados por stage
@@ -122,6 +133,7 @@ router.get("/stats", async (req: Request, res: Response) => {
       leadCount,
       campaignCount,
       dispatchCount,
+      dispatchesToday,
       leadStages,
       dispatchStatuses,
       weeklyDispatches: weeklyData,
