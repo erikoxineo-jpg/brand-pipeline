@@ -34,28 +34,30 @@ setupSocketIO(server);
 app.use(cors());
 
 // ── Webhook routes FIRST (with tolerant body parsing, no auth) ──
-// Evolution API sometimes sends JSON with bad escape sequences, so we parse manually
-const tolerantJsonParser: express.RequestHandler = (req, _res, next) => {
-  let raw = "";
-  req.setEncoding("utf8");
-  req.on("data", (chunk: string) => { raw += chunk; });
-  req.on("end", () => {
-    try {
-      req.body = JSON.parse(raw);
-    } catch {
+// Evolution API sometimes sends JSON with bad escape sequences
+const tolerantJsonParser: express.RequestHandler[] = [
+  express.raw({ type: "*/*", limit: "10mb" }),
+  (req: express.Request, _res: express.Response, next: express.NextFunction) => {
+    if (Buffer.isBuffer(req.body) && req.body.length > 0) {
+      const raw = req.body.toString("utf8");
       try {
-        // Fix common issues: bad escape sequences, control chars
-        const cleaned = raw.replace(/[\x00-\x1F\x7F]/g, " ");
-        req.body = JSON.parse(cleaned);
+        req.body = JSON.parse(raw);
       } catch {
-        console.error("Webhook JSON parse failed, raw length:", raw.length);
-        req.body = {};
+        try {
+          const cleaned = raw.replace(/[\x00-\x1F\x7F]/g, " ");
+          req.body = JSON.parse(cleaned);
+        } catch {
+          console.error("Webhook JSON parse failed, raw length:", raw.length);
+          req.body = {};
+        }
       }
+    } else if (!req.body || (typeof req.body === "object" && Object.keys(req.body).length === 0)) {
+      req.body = {};
     }
     next();
-  });
-};
-app.use("/api/webhooks/evolution", tolerantJsonParser, evolutionWebhookRoutes);
+  },
+];
+app.use("/api/webhooks/evolution", ...tolerantJsonParser, evolutionWebhookRoutes);
 app.use("/api/webhooks/whatsapp", express.json({ limit: "10mb" }), whatsappWebhookRoutes);
 app.use("/api/webhooks/asaas", express.json({ limit: "10mb" }), asaasWebhookRoutes);
 
