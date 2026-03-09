@@ -19,7 +19,6 @@ import {
   TrendingUp,
   Clock,
   Target,
-  DollarSign,
   Calculator,
   Menu,
   X,
@@ -66,54 +65,54 @@ const features = [
     icon: MessageSquare,
     title: "Disparos via WhatsApp",
     description:
-      "Campanhas personalizadas com templates aprovados. Envio em massa com controle de velocidade e respeito ao opt-out.",
+      "Campanhas personalizadas com variáveis dinâmicas. Envio em massa com controle de velocidade e respeito ao opt-out.",
   },
   {
     icon: Users,
     title: "Pipeline Kanban",
     description:
-      "Acompanhe cada lead pelo funil de reativação: Importado → Elegível → Contactado → Respondeu → Reativado.",
+      "Acompanhe cada lead pelo funil de reativação: Importado → Elegível → Pronto → Contactado → Respondeu → Reativado.",
   },
   {
     icon: BarChart3,
     title: "Dashboard em Tempo Real",
     description:
-      "KPIs de conversão, performance por operador, motivos de inatividade e funil completo em uma visão unificada.",
+      "KPIs de conversão, distribuição por etapa, estatísticas de disparos e funil completo em uma visão unificada.",
   },
   {
     icon: Shield,
     title: "Equipes & Permissões",
     description:
-      "Gerencie múltiplas lojas ou marcas com controle de acesso por papel: Admin, Gestor e Operador. Cada marca com dados isolados.",
+      "Gerencie múltiplas lojas ou marcas com controle de acesso por papel: Owner, Admin e Membro. Cada marca com dados isolados.",
   },
   {
     icon: Zap,
     title: "Automação de Campanhas",
     description:
-      "Crie campanhas com regras de elegibilidade, agendamento e acompanhamento automático de resultados.",
+      "Crie campanhas com disparo automático, follow-ups sequenciais e acompanhamento de resultados em tempo real.",
   },
 ];
 
 const testimonials = [
   {
-    name: "Dra. Fernanda Lima",
-    role: "Diretora — Clínica Vitale",
+    name: "Clínicas & Estética",
+    role: "Cenário de uso",
     content:
-      "Reativamos 23% dos pacientes inativos em apenas 2 semanas. Agendamentos pelo WhatsApp dispararam e o retorno foi imediato.",
+      "Importe sua base de pacientes inativos, envie campanhas com ofertas de retorno e acompanhe os agendamentos pelo pipeline Kanban em tempo real.",
     stars: 5,
   },
   {
-    name: "Ricardo Santos",
-    role: "Gerente — Boutique Essenza",
+    name: "Lojas & E-commerce",
+    role: "Cenário de uso",
     content:
-      "O pipeline Kanban é genial. Consigo ver exatamente em que etapa cada cliente está e meus operadores sabem exatamente o que fazer.",
+      "Organize seus clientes por tempo de inatividade, crie campanhas segmentadas com cupons exclusivos e acompanhe cada resposta no funil de reativação.",
     stars: 5,
   },
   {
-    name: "Camila Rocha",
-    role: "Proprietária — PetVida",
+    name: "Pet Shops & Serviços",
+    role: "Cenário de uso",
     content:
-      "De 4.000 clientes inativos, recuperamos 340 em 30 dias. Vendas de rações e banho & tosa dispararam com as campanhas de reativação.",
+      "Identifique clientes que pararam de comprar, envie lembretes personalizados via WhatsApp e recupere receita recorrente de forma automatizada.",
     stars: 5,
   },
 ];
@@ -277,7 +276,7 @@ const LandingPage = () => {
             <motion.div variants={fadeUp} className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
               <a href="#pricing">
                 <Button size="lg" className="h-12 gap-2 px-8 text-base">
-                  Ver Planos — A partir de R$99/mês <ArrowRight className="h-5 w-5" />
+                  Ver Planos — A partir de R$97/mês <ArrowRight className="h-5 w-5" />
                 </Button>
               </a>
               <a href="#screenshots">
@@ -467,10 +466,10 @@ const LandingPage = () => {
             className="mx-auto max-w-2xl text-center"
           >
             <motion.h2 variants={fadeUp} className="text-3xl font-bold text-foreground sm:text-4xl">
-              Resultados reais em diferentes segmentos
+              Exemplos de conversas em diferentes segmentos
             </motion.h2>
             <motion.p variants={fadeUp} className="mt-4 text-lg text-muted-foreground">
-              Veja como negócios diversos reconquistam clientes com o ReConnect.
+              Veja como negócios diversos podem reconquistar clientes com o ReConnect.
             </motion.p>
           </motion.div>
           <motion.div
@@ -484,8 +483,8 @@ const LandingPage = () => {
               {
                 brand: "Clínica Vitale",
                 segment: "Estética & Saúde",
-                metric: "23%",
-                metricLabel: "de reativação",
+                metric: "Estética",
+                metricLabel: "potencial de reativação",
                 logo: "💆‍♀️",
                 logoColor: "bg-sky-100 dark:bg-sky-900/30",
                 messages: [
@@ -497,8 +496,8 @@ const LandingPage = () => {
               {
                 brand: "Boutique Essenza",
                 segment: "Moda Feminina",
-                metric: "340",
-                metricLabel: "clientes em 30 dias",
+                metric: "Moda",
+                metricLabel: "potencial de reativação",
                 logo: "👗",
                 logoColor: "bg-pink-100 dark:bg-pink-900/30",
                 messages: [
@@ -511,8 +510,8 @@ const LandingPage = () => {
               {
                 brand: "PetVida",
                 segment: "Pet Shop & Veterinária",
-                metric: "R$18k",
-                metricLabel: "recuperados no 1º mês",
+                metric: "Pet",
+                metricLabel: "potencial de reativação",
                 logo: "🐾",
                 logoColor: "bg-amber-100 dark:bg-amber-900/30",
                 messages: [
@@ -631,13 +630,13 @@ const LandingPage = () => {
               <motion.div variants={fadeUp}>
                 <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-4 py-1.5 text-sm text-primary">
                   <Calculator className="h-4 w-4" />
-                  ROI Médio de 34%
+                  Potencial de Retorno
                 </div>
                 <h2 className="text-3xl font-bold text-foreground sm:text-4xl">
                   Seu investimento se paga em <span className="text-primary">semanas</span>
                 </h2>
                 <p className="mt-4 text-lg text-muted-foreground">
-                  Com uma taxa média de reativação de 34%, o retorno sobre o investimento é rápido e previsível. Veja exemplos reais de quanto cada plano pode gerar:
+                  Baseado em benchmarks de mercado de WhatsApp marketing (taxa de ~34%), veja o potencial estimado de cada plano:
                 </p>
               </motion.div>
 
@@ -646,24 +645,24 @@ const LandingPage = () => {
                   {
                     plan: "Starter — 500 leads",
                     invest: "R$ 97/mês",
-                    reactivated: "90 clientes",
-                    example: "Uma clínica de estética com ticket médio de R$ 250 pode gerar R$ 22.500 em agendamentos reativados.",
-                    roi: "232x o investimento",
+                    reactivated: "~170 clientes*",
+                    example: "Uma clínica de estética com ticket médio de R$ 250 poderia gerar até R$ 42.500 em agendamentos.",
+                    roi: "Potencial alto",
                   },
                   {
                     plan: "Professional — 2.000 leads",
                     invest: "R$ 197/mês",
-                    reactivated: "680 clientes",
-                    example: "Uma loja de roupas com ticket médio de R$ 120 pode recuperar R$ 81.600 em vendas recorrentes.",
-                    roi: "414x o investimento",
+                    reactivated: "~680 clientes*",
+                    example: "Uma loja de roupas com ticket médio de R$ 120 poderia recuperar até R$ 81.600 em vendas.",
+                    roi: "Potencial alto",
                     highlight: true,
                   },
                   {
                     plan: "Business — 10.000 leads",
                     invest: "R$ 397/mês",
-                    reactivated: "3.400 clientes",
-                    example: "Uma marca de cosméticos com ticket médio de R$ 80 pode faturar R$ 272.000 em vendas reativadas.",
-                    roi: "685x o investimento",
+                    reactivated: "~3.400 clientes*",
+                    example: "Uma marca de cosméticos com ticket médio de R$ 80 poderia faturar até R$ 272.000.",
+                    roi: "Potencial alto",
                   },
                 ].map((item) => (
                   <Card key={item.plan} className={`border-border/50 transition-shadow hover:shadow-lg ${item.highlight ? "border-primary ring-2 ring-primary/20" : ""}`}>
@@ -676,17 +675,17 @@ const LandingPage = () => {
                         </div>
                         <div className="text-right shrink-0">
                           <div className="flex items-center gap-1 text-primary">
-                            <DollarSign className="h-4 w-4" />
+                            <TrendingUp className="h-4 w-4" />
                             <span className="text-sm font-bold">{item.roi}</span>
                           </div>
-                          <p className="mt-1 text-xs text-muted-foreground">{item.reactivated} reativados</p>
+                          <p className="mt-1 text-xs text-muted-foreground">{item.reactivated}</p>
                         </div>
                       </div>
                     </CardContent>
                   </Card>
                 ))}
                 <p className="text-center text-xs text-muted-foreground">
-                  * Baseado na taxa média de reativação de 34% e tickets médios por segmento. Resultados podem variar.
+                  * Estimativas baseadas em benchmarks de mercado (taxa de 34%) e tickets médios por segmento. Resultados reais podem variar significativamente.
                 </p>
               </motion.div>
             </div>
@@ -704,10 +703,10 @@ const LandingPage = () => {
             className="mx-auto max-w-2xl text-center"
           >
             <motion.h2 variants={fadeUp} className="text-3xl font-bold text-foreground sm:text-4xl">
-              Quem usa, recomenda
+              Ideal para diversos segmentos
             </motion.h2>
             <motion.p variants={fadeUp} className="mt-4 text-lg text-muted-foreground">
-              Empresas de todos os tamanhos já estão recuperando clientes com o ReConnect.
+              Veja como diferentes tipos de negócio podem usar o ReConnect para reativar clientes.
             </motion.p>
           </motion.div>
           <motion.div
@@ -770,10 +769,10 @@ const LandingPage = () => {
             <Accordion type="single" collapsible className="w-full">
               <AccordionItem value="api">
                 <AccordionTrigger className="text-left text-base hover:no-underline">
-                  Preciso ter WhatsApp Business API?
+                  Como funciona a conexão com o WhatsApp?
                 </AccordionTrigger>
                 <AccordionContent className="text-muted-foreground">
-                  Sim, o ReConnect se integra via API oficial do WhatsApp Business. Se você ainda não tem, podemos ajudar na configuração durante o onboarding.
+                  O ReConnect conecta ao seu WhatsApp via QR code, similar ao WhatsApp Web. Basta escanear o código nas configurações e pronto — seus disparos já podem começar.
                 </AccordionContent>
               </AccordionItem>
               <AccordionItem value="import">
@@ -786,10 +785,10 @@ const LandingPage = () => {
               </AccordionItem>
               <AccordionItem value="limits">
                 <AccordionTrigger className="text-left text-base hover:no-underline">
-                  Existe limite de disparos?
+                  Existe limite de mensagens?
                 </AccordionTrigger>
                 <AccordionContent className="text-muted-foreground">
-                  Não há limite de disparos em nenhum plano. O limite é de contatos na base ativa. Você pode enviar quantas campanhas quiser para os contatos do seu plano.
+                  Cada plano tem um limite mensal de mensagens: Starter (1.000), Professional (5.000) e Business (20.000). Você pode criar quantas campanhas quiser dentro do seu limite.
                 </AccordionContent>
               </AccordionItem>
               <AccordionItem value="cancel">
@@ -805,7 +804,7 @@ const LandingPage = () => {
                   Meus dados estão seguros?
                 </AccordionTrigger>
                 <AccordionContent className="text-muted-foreground">
-                  Sim. Utilizamos criptografia em trânsito e em repouso, servidores seguros com certificado SSL e estamos em conformidade com a LGPD. Seus dados e os de seus clientes estão protegidos.
+                  Sim. Utilizamos conexão SSL criptografada, servidores seguros e dados isolados por workspace. Seus dados e os de seus clientes ficam protegidos.
                 </AccordionContent>
               </AccordionItem>
               <AccordionItem value="time">
@@ -813,7 +812,7 @@ const LandingPage = () => {
                   Quanto tempo leva para começar?
                 </AccordionTrigger>
                 <AccordionContent className="text-muted-foreground">
-                  Menos de 2 minutos. Crie sua conta, importe sua base de clientes e lance sua primeira campanha de reativação em poucos cliques.
+                  Poucos minutos. Crie sua conta, conecte seu WhatsApp via QR code, importe sua base de clientes e lance sua primeira campanha de reativação.
                 </AccordionContent>
               </AccordionItem>
             </Accordion>
@@ -849,17 +848,17 @@ const LandingPage = () => {
               {
                 name: "Starter", planId: "starter", price: "R$97", highlight: false,
                 leads: "500 leads", messages: "1.000 msgs/mês", users: "1 usuário",
-                features: ["Dashboard completo", "Pipeline Kanban", "Importação de leads", "Suporte por e-mail"],
+                features: ["Dashboard completo", "Pipeline Kanban", "Importação de leads", "Conexão WhatsApp"],
               },
               {
                 name: "Professional", planId: "professional", price: "R$197", highlight: true,
                 leads: "2.000 leads", messages: "5.000 msgs/mês", users: "3 usuários",
-                features: ["Tudo do Starter", "Relatórios avançados", "Campanhas ilimitadas", "Suporte prioritário"],
+                features: ["Tudo do Starter", "Campanhas ilimitadas", "Follow-ups automáticos", "3 usuários na equipe"],
               },
               {
                 name: "Business", planId: "business", price: "R$397", highlight: false,
                 leads: "10.000 leads", messages: "20.000 msgs/mês", users: "10 usuários",
-                features: ["Tudo do Professional", "API completa", "Múltiplos workspaces", "Gerente de conta dedicado"],
+                features: ["Tudo do Professional", "Múltiplos workspaces", "Automação de campanhas", "10 usuários na equipe"],
               },
             ].map((plan) => (
               <motion.div key={plan.planId} variants={fadeUp}>
@@ -918,7 +917,7 @@ const LandingPage = () => {
               Seus clientes inativos estão comprando do concorrente
             </h2>
             <p className="mx-auto mt-4 max-w-xl text-lg text-primary-foreground/80">
-              Recupere-os agora. Comece em 2 minutos — sem cartão de crédito para criar sua conta.
+              Recupere-os agora. Comece em poucos minutos — cadastro rápido e sem burocracia.
             </p>
             <div className="mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row">
               <Link to="/login">
@@ -927,7 +926,7 @@ const LandingPage = () => {
                   variant="secondary"
                   className="h-12 gap-2 px-8 text-base font-semibold"
                 >
-                  Criar Conta Grátis <ArrowRight className="h-5 w-5" />
+                  Começar Agora <ArrowRight className="h-5 w-5" />
                 </Button>
               </Link>
               <a href="#pricing">
@@ -941,8 +940,8 @@ const LandingPage = () => {
               </a>
             </div>
             <div className="mt-6 flex flex-wrap items-center justify-center gap-6 text-sm text-primary-foreground/70">
-              <span className="flex items-center gap-1.5"><CheckCircle2 className="h-4 w-4" /> Setup em 2 minutos</span>
-              <span className="flex items-center gap-1.5"><CheckCircle2 className="h-4 w-4" /> Disparos ilimitados</span>
+              <span className="flex items-center gap-1.5"><CheckCircle2 className="h-4 w-4" /> Setup rápido via QR code</span>
+              <span className="flex items-center gap-1.5"><CheckCircle2 className="h-4 w-4" /> Campanhas ilimitadas</span>
               <span className="flex items-center gap-1.5"><CheckCircle2 className="h-4 w-4" /> Cancele quando quiser</span>
             </div>
           </motion.div>
@@ -960,10 +959,10 @@ const LandingPage = () => {
             className="grid grid-cols-2 gap-6 sm:grid-cols-4"
           >
             {[
-              { icon: Shield, label: "LGPD Compliant", desc: "Em conformidade com a lei de proteção de dados" },
-              { icon: Lock, label: "Dados Criptografados", desc: "SSL + criptografia em repouso" },
-              { icon: MessageSquare, label: "API WhatsApp Oficial", desc: "Integração certificada pelo Meta" },
-              { icon: Headphones, label: "Suporte Dedicado", desc: "Atendimento humano em todos os planos" },
+              { icon: Shield, label: "Dados Protegidos", desc: "Hospedagem segura com isolamento por workspace" },
+              { icon: Lock, label: "Conexão SSL", desc: "Tráfego criptografado de ponta a ponta" },
+              { icon: MessageSquare, label: "WhatsApp Integrado", desc: "Conexão via QR code em poucos segundos" },
+              { icon: Headphones, label: "Suporte por E-mail", desc: "Atendimento via contato@oxineo.com.br" },
             ].map((item) => (
               <motion.div key={item.label} variants={fadeUp} className="flex flex-col items-center gap-2 text-center">
                 <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-primary/10">
