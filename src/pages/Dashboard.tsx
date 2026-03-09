@@ -55,7 +55,7 @@ function GettingStartedChecklist({ workspaceId }: { workspaceId: string }) {
   const dispatchSentCount = checklistStats?.dispatchCount || 0;
 
   const steps = [
-    { label: "Conectar WhatsApp", done: waConfig?.evolution_status === "connected" || !!waConfig?.access_token, href: "/settings", icon: Wifi },
+    { label: "Conectar WhatsApp", done: waConfig?.evolution_status === "open" || !!waConfig?.access_token, href: "/settings", icon: Wifi },
     { label: "Importar Leads", done: leadCount > 0, href: "/imports", icon: Upload },
     { label: "Criar Campanha", done: campaignCount > 0, href: "/campaigns", icon: Megaphone },
     { label: "Enviar Primeiro Disparo", done: dispatchSentCount > 0, href: "/dispatches", icon: Send },

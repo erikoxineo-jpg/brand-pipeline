@@ -48,12 +48,18 @@ router.post("/", async (req: Request, res: Response) => {
 
     let newLeads = 0;
     let duplicates = 0;
+    let eligible = 0;
 
     // Upsert leads: conflito em [workspace_id, phone] -> ignora duplicatas
     for (const lead of leads) {
       if (!lead.phone) {
         continue;
       }
+
+      const daysInactive = lead.days_inactive != null ? parseInt(lead.days_inactive) || null : null;
+      // Auto-classify: leads inactive >= 90 days are eligible for campaigns
+      const stage = daysInactive != null && daysInactive >= 90 ? "eligible" : "imported";
+      if (stage === "eligible") eligible++;
 
       try {
         await prisma.lead.create({
@@ -63,9 +69,9 @@ router.post("/", async (req: Request, res: Response) => {
             phone: lead.phone,
             email: lead.email || null,
             last_purchase: lead.last_purchase || null,
-            days_inactive: lead.days_inactive != null ? parseInt(lead.days_inactive) || null : null,
+            days_inactive: daysInactive,
             metadata: lead.metadata || null,
-            stage: "imported",
+            stage,
           },
         });
         newLeads++;
@@ -85,7 +91,7 @@ router.post("/", async (req: Request, res: Response) => {
       data: {
         new_leads: newLeads,
         duplicates,
-        status: "completed",
+        status: "success",
       },
     });
 
@@ -94,6 +100,7 @@ router.post("/", async (req: Request, res: Response) => {
       new_leads: newLeads,
       duplicates,
       total: leads.length,
+      eligible,
     });
   } catch (err: any) {
     console.error("Import leads error:", err.message);
