@@ -12,7 +12,7 @@ import { Navigate } from "react-router-dom";
 
 const Login = () => {
   const navigate = useNavigate();
-  const { session, signIn, signUp } = useAuth();
+  const { user, signIn, signUp } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -22,7 +22,7 @@ const Login = () => {
   const searchParams = new URLSearchParams(window.location.search);
   const planFromUrl = searchParams.get("plan");
 
-  if (session) {
+  if (user) {
     return <Navigate to={planFromUrl ? `/?autoCheckout=${planFromUrl}` : "/dashboard"} replace />;
   }
 

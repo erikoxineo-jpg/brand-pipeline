@@ -124,7 +124,7 @@ const screenshots = [
 ];
 
 const LandingPage = () => {
-  const { session } = useAuth();
+  const { user } = useAuth();
   const isMobile = useIsMobile();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -140,7 +140,7 @@ const LandingPage = () => {
   };
 
   const handleCheckout = useCallback((planId: string) => {
-    if (!session) {
+    if (!user) {
       window.location.href = `/login?plan=${planId}`;
       return;
     }
@@ -149,17 +149,17 @@ const LandingPage = () => {
     if (planInfo) {
       setCheckoutPlan({ planId, ...planInfo });
     }
-  }, [session]);
+  }, [user]);
 
   // Auto-trigger checkout after login redirect
   useEffect(() => {
     const autoCheckout = searchParams.get("autoCheckout");
-    if (autoCheckout && session && !autoCheckoutTriggered.current) {
+    if (autoCheckout && user && !autoCheckoutTriggered.current) {
       autoCheckoutTriggered.current = true;
       setSearchParams({}, { replace: true });
       handleCheckout(autoCheckout);
     }
-  }, [searchParams, session, handleCheckout, setSearchParams]);
+  }, [searchParams, user, handleCheckout, setSearchParams]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -183,14 +183,14 @@ const LandingPage = () => {
               variant="ghost"
               size="sm"
               onClick={() => {
-                if (session) {
+                if (user) {
                   navigate(isMobile ? "/mobile-warning" : "/dashboard");
                 } else {
                   navigate("/login");
                 }
               }}
             >
-              {session ? "Acessar Painel" : "Entrar"}
+              {user ? "Acessar Painel" : "Entrar"}
             </Button>
             <a href="#pricing">
               <Button size="sm" className="gap-1.5">
@@ -220,14 +220,14 @@ const LandingPage = () => {
                 className="w-full"
                 onClick={() => {
                   setMobileMenuOpen(false);
-                  if (session) {
+                  if (user) {
                     navigate("/mobile-warning");
                   } else {
                     navigate("/login");
                   }
                 }}
               >
-                {session ? "Acessar Painel" : "Entrar"}
+                {user ? "Acessar Painel" : "Entrar"}
               </Button>
               <a href="#pricing" onClick={() => setMobileMenuOpen(false)}>
                 <Button size="sm" className="w-full gap-1.5">

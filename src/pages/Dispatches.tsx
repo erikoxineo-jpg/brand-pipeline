@@ -42,7 +42,7 @@ const aiResponseStatusConfig: Record<string, { label: string; className: string 
 };
 
 const Dispatches = () => {
-  const { currentWorkspace, session } = useAuth();
+  const { currentWorkspace } = useAuth();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const workspaceId = currentWorkspace?.id;
