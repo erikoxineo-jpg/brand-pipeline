@@ -9,7 +9,8 @@ export async function sendWhatsAppMessage(
   workspaceId: string,
   phone: string,
   text: string,
-  dispatchId?: string
+  dispatchId?: string,
+  senderType?: string
 ): Promise<{ messageId: string | null; error?: string }> {
   try {
     // 1. Fetch workspace WhatsApp config
@@ -127,6 +128,7 @@ export async function sendWhatsAppMessage(
           body: text,
           whatsapp_message_id: messageId,
           status: "sent",
+          sender_type: senderType || null,
         },
       });
     }

@@ -105,6 +105,27 @@ router.get("/stats", async (req: Request, res: Response) => {
       }),
     ]);
 
+    // Agent-specific stats
+    const [agentMessagesSent, agentEscalations, agentConfig] = await Promise.all([
+      prisma.message.count({
+        where: {
+          workspace_id: workspaceId,
+          sender_type: "agent",
+          created_at: { gte: twentyFourHoursAgo },
+        },
+      }),
+      prisma.lead.count({
+        where: {
+          workspace_id: workspaceId,
+          agent_escalated: true,
+        },
+      }),
+      prisma.agentConfig.findUnique({
+        where: { workspace_id: workspaceId },
+        select: { enabled: true },
+      }),
+    ]);
+
     // Formatar leadStages: Record<string, number> (ex: { eligible: 5, contacted: 3 })
     const leadStages: Record<string, number> = {};
     for (const row of leadStagesRaw) {
@@ -143,6 +164,11 @@ router.get("/stats", async (req: Request, res: Response) => {
         sent24h: dispatchStatuses.sent || 0,
         classified24h: classifiedLast24h,
         autoResponded24h: autoRespondedLast24h,
+      },
+      agentStats: {
+        enabled: agentConfig?.enabled || false,
+        messagesSent24h: agentMessagesSent,
+        escalationsPending: agentEscalations,
       },
     });
   } catch (err: any) {

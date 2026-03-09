@@ -2,9 +2,11 @@ import { prisma } from "../lib/prisma";
 import { config } from "../config";
 import { emitToWorkspace } from "../socket";
 import { sendWhatsAppMessage } from "./whatsapp.service";
+import { handleInboundMessage } from "./agent.service";
 
 /**
  * Classify an inbound response using Claude API and handle auto-respond logic.
+ * If agent is enabled for the workspace, delegates to handleInboundMessage.
  */
 export async function classifyResponse(params: {
   leadId: string;
@@ -13,6 +15,24 @@ export async function classifyResponse(params: {
   workspaceId: string;
 }): Promise<any> {
   const { leadId, dispatchId, messageBody, workspaceId } = params;
+
+  // Delegate to autonomous agent if enabled
+  try {
+    const agentConfig = await prisma.agentConfig.findUnique({
+      where: { workspace_id: workspaceId },
+    });
+
+    if (agentConfig?.enabled) {
+      return handleInboundMessage({
+        workspaceId,
+        leadId,
+        inboundMessage: messageBody,
+        dispatchId,
+      });
+    }
+  } catch (err: any) {
+    console.error("[ai] Agent delegation check failed:", err.message);
+  }
 
   if (!config.anthropicApiKey) {
     console.error("ANTHROPIC_API_KEY not configured");

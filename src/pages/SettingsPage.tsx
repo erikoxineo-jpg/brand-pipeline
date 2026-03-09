@@ -9,7 +9,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
 } from "@/components/ui/dialog";
-import { Building2, Users, Plus, Pencil, Trash2, Loader2, Wifi, CreditCard, ExternalLink, QrCode, Code, AlertTriangle, CheckCircle2, XCircle, RefreshCw, Smartphone } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
+import { Building2, Users, Plus, Pencil, Trash2, Loader2, Wifi, CreditCard, ExternalLink, QrCode, Code, AlertTriangle, CheckCircle2, XCircle, RefreshCw, Smartphone, Bot } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiFetch } from "@/lib/api/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -73,6 +75,14 @@ const SettingsPage = () => {
   const [editMemberId, setEditMemberId] = useState<string | null>(null);
   const [editRole, setEditRole] = useState<string>("member");
 
+  // Agent config state
+  const [agentEnabled, setAgentEnabled] = useState(false);
+  const [agentBrandName, setAgentBrandName] = useState("");
+  const [agentBrandTone, setAgentBrandTone] = useState("amigável e informal");
+  const [agentBusinessContext, setAgentBusinessContext] = useState("");
+  const [agentEscalationRules, setAgentEscalationRules] = useState("");
+  const [agentMaxTurns, setAgentMaxTurns] = useState(10);
+
   // Load workspace data
   useEffect(() => {
     if (currentWorkspace) {
@@ -99,6 +109,48 @@ const SettingsPage = () => {
       setEvolutionPhone(waConfig.evolution_phone || "");
     }
   }, [waConfig]);
+
+  // Load agent config
+  const { data: agentConfig } = useQuery({
+    queryKey: ["agent-config", workspaceId],
+    queryFn: () => apiFetch<any>("/agent/config").catch(() => null),
+    enabled: !!workspaceId,
+  });
+
+  useEffect(() => {
+    if (agentConfig) {
+      setAgentEnabled(agentConfig.enabled || false);
+      setAgentBrandName(agentConfig.brand_name || currentWorkspace?.name || "");
+      setAgentBrandTone(agentConfig.brand_tone || "amigável e informal");
+      setAgentBusinessContext(agentConfig.business_context || "");
+      setAgentEscalationRules(agentConfig.escalation_rules || "");
+      setAgentMaxTurns(agentConfig.max_turns || 10);
+    } else if (currentWorkspace) {
+      setAgentBrandName(currentWorkspace.name);
+    }
+  }, [agentConfig, currentWorkspace]);
+
+  // Save agent config
+  const saveAgentMutation = useMutation({
+    mutationFn: async () => {
+      await apiFetch("/agent/config", {
+        method: "PUT",
+        body: JSON.stringify({
+          enabled: agentEnabled,
+          brand_name: agentBrandName,
+          brand_tone: agentBrandTone,
+          business_context: agentBusinessContext,
+          escalation_rules: agentEscalationRules,
+          max_turns: agentMaxTurns,
+        }),
+      });
+    },
+    onSuccess: () => {
+      toast.success("Configuração do agente salva");
+      queryClient.invalidateQueries({ queryKey: ["agent-config"] });
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
 
   // Cleanup polling on unmount
   useEffect(() => {
@@ -425,6 +477,10 @@ const SettingsPage = () => {
             <Building2 className="h-4 w-4" />
             Marca
           </TabsTrigger>
+          <TabsTrigger value="agent" className="gap-2">
+            <Bot className="h-4 w-4" />
+            Agente IA
+          </TabsTrigger>
           <TabsTrigger value="whatsapp" className="gap-2">
             <Wifi className="h-4 w-4" />
             WhatsApp
@@ -461,6 +517,84 @@ const SettingsPage = () => {
               >
                 {saveBrandMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Salvar Alterações
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Agent IA Tab */}
+        <TabsContent value="agent" className="space-y-4 pt-4">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-base">Agente Autônomo de Conversas</CardTitle>
+                  <CardDescription>O agente responde automaticamente leads que enviam mensagens no WhatsApp</CardDescription>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">{agentEnabled ? "Ativo" : "Inativo"}</span>
+                  <Switch checked={agentEnabled} onCheckedChange={setAgentEnabled} />
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label>Nome da Marca</Label>
+                <Input
+                  value={agentBrandName}
+                  onChange={(e) => setAgentBrandName(e.target.value)}
+                  placeholder="Nome do seu negócio"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Tom da Marca</Label>
+                <select
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  value={agentBrandTone}
+                  onChange={(e) => setAgentBrandTone(e.target.value)}
+                >
+                  <option value="amigável e informal">Amigável e informal</option>
+                  <option value="profissional">Profissional</option>
+                  <option value="descontraído">Descontraído</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label>Contexto do Negócio</Label>
+                <Textarea
+                  value={agentBusinessContext}
+                  onChange={(e) => setAgentBusinessContext(e.target.value)}
+                  placeholder="Descreva seu negócio, produtos, preços, horários de funcionamento..."
+                  rows={4}
+                />
+                <p className="text-xs text-muted-foreground">O agente usará este contexto para responder perguntas dos clientes</p>
+              </div>
+              <div className="space-y-2">
+                <Label>Regras de Escalação</Label>
+                <Textarea
+                  value={agentEscalationRules}
+                  onChange={(e) => setAgentEscalationRules(e.target.value)}
+                  placeholder="Quando escalar para atendimento humano. Ex: pedidos de reembolso, reclamações..."
+                  rows={3}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Máximo de Turnos</Label>
+                <Input
+                  type="number"
+                  value={agentMaxTurns}
+                  onChange={(e) => setAgentMaxTurns(parseInt(e.target.value) || 10)}
+                  min={1}
+                  max={50}
+                />
+                <p className="text-xs text-muted-foreground">Após esse número de respostas, o agente escala para humano</p>
+              </div>
+              <Button
+                size="sm"
+                onClick={() => saveAgentMutation.mutate()}
+                disabled={saveAgentMutation.isPending}
+              >
+                {saveAgentMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Salvar Configuração
               </Button>
             </CardContent>
           </Card>

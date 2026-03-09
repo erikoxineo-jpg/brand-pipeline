@@ -39,6 +39,7 @@ const AppSidebar = () => {
   const navigate = useNavigate();
   const { profile, currentWorkspace, currentWorkspaceRole, signOut } = useAuth();
   const [pendingAiCount, setPendingAiCount] = useState(0);
+  const [escalationCount, setEscalationCount] = useState(0);
 
   useEffect(() => {
     if (!currentWorkspace?.id) return;
@@ -46,6 +47,11 @@ const AppSidebar = () => {
     // Initial fetch
     apiFetch<any[]>("/dispatches/pending-reviews")
       .then((reviews) => setPendingAiCount(reviews?.length || 0))
+      .catch(() => {});
+
+    // Fetch escalations count
+    apiFetch<any[]>("/agent/escalated")
+      .then((leads) => setEscalationCount(leads?.length || 0))
       .catch(() => {});
 
     // Real-time updates via Socket.io
@@ -58,13 +64,20 @@ const AppSidebar = () => {
         .then((reviews) => setPendingAiCount(reviews?.length || 0))
         .catch(() => {});
     };
+    const handleEscalation = () => {
+      apiFetch<any[]>("/agent/escalated")
+        .then((leads) => setEscalationCount(leads?.length || 0))
+        .catch(() => {});
+    };
 
     socket?.on("ai-pending:count", handleCount);
     socket?.on("dispatch:updated", handleDispatchUpdated);
+    socket?.on("agent:escalation", handleEscalation);
 
     return () => {
       socket?.off("ai-pending:count", handleCount);
       socket?.off("dispatch:updated", handleDispatchUpdated);
+      socket?.off("agent:escalation", handleEscalation);
     };
   }, [currentWorkspace?.id]);
 
@@ -99,6 +112,11 @@ const AppSidebar = () => {
               {item.name === "Disparos" && pendingAiCount > 0 && (
                 <Badge variant="secondary" className="ml-auto bg-warning/10 text-warning text-[10px] px-1.5 py-0">
                   {pendingAiCount}
+                </Badge>
+              )}
+              {item.name === "Pipeline" && escalationCount > 0 && (
+                <Badge variant="secondary" className="ml-auto bg-destructive/10 text-destructive text-[10px] px-1.5 py-0">
+                  {escalationCount}
                 </Badge>
               )}
             </button>

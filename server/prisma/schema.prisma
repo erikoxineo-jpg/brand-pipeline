@@ -57,6 +57,7 @@ model Workspace {
   whatsapp_config WhatsappConfig?
   subscriptions   Subscription[]
   payments        Payment[]
+  agent_config    AgentConfig?
 
   @@map("workspaces")
 }
@@ -85,11 +86,14 @@ model Lead {
   stage             String     @default("imported")
   opt_out           Boolean    @default(false)
   metadata          Json?
-  ai_classification String?
-  ai_summary        String?
-  created_at        DateTime   @default(now())
-  updated_at        DateTime   @default(now()) @updatedAt
-  workspace         Workspace  @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+  ai_classification         String?
+  ai_summary                String?
+  agent_escalated           Boolean    @default(false)
+  agent_escalated_at        DateTime?
+  agent_escalation_reason   String?
+  created_at                DateTime   @default(now())
+  updated_at                DateTime   @default(now()) @updatedAt
+  workspace                 Workspace  @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
   dispatches        Dispatch[]
   messages          Message[]
 
@@ -182,6 +186,7 @@ model Message {
   dispatch_id         String?   @db.Uuid
   direction           String
   body                String
+  sender_type         String?
   whatsapp_message_id String?
   status              String    @default("sent")
   created_at          DateTime  @default(now())
@@ -246,4 +251,21 @@ model Payment {
   subscription     Subscription? @relation(fields: [subscription_id], references: [id], onDelete: SetNull)
 
   @@map("payments")
+}
+
+model AgentConfig {
+  id               String    @id @default(uuid()) @db.Uuid
+  workspace_id     String    @unique @db.Uuid
+  enabled          Boolean   @default(false)
+  system_prompt    String?
+  business_context String?
+  brand_name       String?
+  brand_tone       String?   @default("amigável e informal")
+  escalation_rules String?
+  max_turns        Int       @default(10)
+  created_at       DateTime  @default(now())
+  updated_at       DateTime  @default(now()) @updatedAt
+  workspace        Workspace @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+
+  @@map("agent_config")
 }

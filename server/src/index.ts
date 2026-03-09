@@ -23,6 +23,7 @@ import evolutionWebhookRoutes from "./routes/webhooks/evolution.routes";
 import whatsappWebhookRoutes from "./routes/webhooks/whatsapp.routes";
 import asaasWebhookRoutes from "./routes/webhooks/asaas.routes";
 import billingRoutes from "./routes/billing.routes";
+import agentRoutes from "./routes/agent.routes";
 
 const app = express();
 const server = http.createServer(app);
@@ -87,6 +88,9 @@ app.use("/api/workspaces", requireAuth, workspacesRoutes);
 
 // Billing routes (auth + workspace obrigatório)
 app.use("/api/billing", requireAuth, requireWorkspace, billingRoutes);
+
+// Agent routes (auth + workspace obrigatório)
+app.use("/api/agent", requireAuth, requireWorkspace, agentRoutes);
 
 // Error handler global
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

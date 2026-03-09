@@ -19,6 +19,8 @@ router.get("/leads", async (req: Request, res: Response) => {
         ai_classification: true,
         ai_summary: true,
         days_inactive: true,
+        agent_escalated: true,
+        agent_escalation_reason: true,
         created_at: true,
       },
       orderBy: { created_at: "desc" },

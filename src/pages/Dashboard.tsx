@@ -139,6 +139,11 @@ const Dashboard = () => {
       classified24h: number;
       autoResponded24h: number;
     };
+    agentStats?: {
+      enabled: boolean;
+      messagesSent24h: number;
+      escalationsPending: number;
+    };
   }
 
   const { data: dashboardStats } = useQuery({
@@ -199,6 +204,7 @@ const Dashboard = () => {
 
   // Agent stats from dashboard stats
   const agentStats = dashboardStats?.aiStats || { activeCampaigns: 0, sent24h: 0, classified24h: 0, autoResponded24h: 0 };
+  const agentAutoStats = dashboardStats?.agentStats || { enabled: false, messagesSent24h: 0, escalationsPending: 0 };
 
   const totalLeads = leadStages.reduce((sum, s) => sum + s.value, 0);
   const reactivated = leadStages.find((s) => s.key === "reactivated")?.value || 0;
@@ -258,41 +264,39 @@ const Dashboard = () => {
       </div>
 
       {/* Agent Panel */}
-      {agentStats && (
-        <Card className={agentStats.activeCampaigns > 0 ? "border-primary/20 bg-primary/5" : ""}>
-          <CardContent className="p-5">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
-                  <Bot className="h-4 w-4 text-primary" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-medium text-foreground">Agente Autônomo</h3>
-                  <p className="text-[10px] text-muted-foreground">Motor roda a cada 5 min</p>
-                </div>
-              </div>
-              <Badge variant="secondary" className={agentStats.activeCampaigns > 0 ? "bg-success/10 text-success" : "bg-secondary text-muted-foreground"}>
-                <Zap className="h-3 w-3 mr-1" />
-                {agentStats.activeCampaigns > 0 ? "Ativo" : "Inativo"}
-              </Badge>
-            </div>
-            <div className="grid grid-cols-3 gap-4 text-center">
-              <div>
-                <p className="text-lg font-semibold text-foreground">{agentStats.sent24h}</p>
-                <p className="text-[10px] text-muted-foreground">Enviados (24h)</p>
+      <Card className={agentAutoStats.enabled ? "border-primary/20 bg-primary/5" : ""}>
+        <CardContent className="p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
+                <Bot className="h-4 w-4 text-primary" />
               </div>
               <div>
-                <p className="text-lg font-semibold text-foreground">{agentStats.classified24h}</p>
-                <p className="text-[10px] text-muted-foreground">IA Classificou</p>
-              </div>
-              <div>
-                <p className="text-lg font-semibold text-foreground">{agentStats.autoResponded24h}</p>
-                <p className="text-[10px] text-muted-foreground">Respostas Auto</p>
+                <h3 className="text-sm font-medium text-foreground">Agente Autônomo</h3>
+                <p className="text-[10px] text-muted-foreground">Responde conversas automaticamente</p>
               </div>
             </div>
-          </CardContent>
-        </Card>
-      )}
+            <Badge variant="secondary" className={agentAutoStats.enabled ? "bg-success/10 text-success" : "bg-secondary text-muted-foreground"}>
+              <Zap className="h-3 w-3 mr-1" />
+              {agentAutoStats.enabled ? "Ativo" : "Inativo"}
+            </Badge>
+          </div>
+          <div className="grid grid-cols-3 gap-4 text-center">
+            <div>
+              <p className="text-lg font-semibold text-foreground">{agentAutoStats.messagesSent24h}</p>
+              <p className="text-[10px] text-muted-foreground">Respostas IA (24h)</p>
+            </div>
+            <div>
+              <p className="text-lg font-semibold text-foreground">{agentStats.classified24h}</p>
+              <p className="text-[10px] text-muted-foreground">IA Classificou</p>
+            </div>
+            <div>
+              <p className="text-lg font-semibold text-foreground">{agentAutoStats.escalationsPending}</p>
+              <p className="text-[10px] text-muted-foreground">Escalações</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* Funnel */}
