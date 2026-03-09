@@ -12,7 +12,7 @@ router.get("/config", async (req: Request, res: Response) => {
       where: { workspace_id: workspaceId },
     });
 
-    res.json({ config: config || null });
+    res.json(config || null);
   } catch (err: any) {
     console.error("Get whatsapp config error:", err.message);
     res.status(500).json({ error: "Erro ao buscar configuração do WhatsApp" });

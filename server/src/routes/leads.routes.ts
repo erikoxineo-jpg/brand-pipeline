@@ -44,6 +44,117 @@ router.get("/", async (req: Request, res: Response) => {
   }
 });
 
+// POST /api/leads
+router.post("/", async (req: Request, res: Response) => {
+  try {
+    const workspaceId = req.workspaceId!;
+    const { name, phone, email, last_purchase, days_inactive, metadata } = req.body;
+
+    if (!phone) {
+      return res.status(400).json({ error: "phone é obrigatório" });
+    }
+
+    const lead = await prisma.lead.create({
+      data: {
+        workspace_id: workspaceId,
+        name: name || null,
+        phone,
+        email: email || null,
+        last_purchase: last_purchase || null,
+        days_inactive: days_inactive != null ? parseInt(days_inactive) || null : null,
+        metadata: metadata || null,
+        stage: "imported",
+      },
+    });
+
+    res.status(201).json(lead);
+  } catch (err: any) {
+    if (err.code === "P2002") {
+      return res.status(409).json({ error: "Lead com este telefone já existe neste workspace" });
+    }
+    console.error("Create lead error:", err.message);
+    res.status(500).json({ error: "Erro ao criar lead" });
+  }
+});
+
+// DELETE /api/leads/bulk — must be before /:id
+router.delete("/bulk", async (req: Request, res: Response) => {
+  try {
+    const workspaceId = req.workspaceId!;
+    const { ids } = req.body;
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ error: "ids é obrigatório e deve ser um array" });
+    }
+
+    if (ids.length > 100) {
+      return res.status(400).json({ error: "Máximo de 100 leads por vez" });
+    }
+
+    const result = await prisma.lead.deleteMany({
+      where: {
+        id: { in: ids },
+        workspace_id: workspaceId,
+      },
+    });
+
+    res.json({ deleted: result.count });
+  } catch (err: any) {
+    console.error("Bulk delete leads error:", err.message);
+    res.status(500).json({ error: "Erro ao deletar leads" });
+  }
+});
+
+// DELETE /api/leads/filtered?stage=&search= — must be before /:id
+router.delete("/filtered", async (req: Request, res: Response) => {
+  try {
+    const workspaceId = req.workspaceId!;
+    const search = (req.query.search as string) || "";
+    const stage = req.query.stage as string | undefined;
+
+    const where: Prisma.LeadWhereInput = { workspace_id: workspaceId };
+
+    if (stage) {
+      where.stage = stage;
+    }
+
+    if (search) {
+      where.OR = [
+        { name: { contains: search, mode: "insensitive" } },
+        { phone: { contains: search, mode: "insensitive" } },
+      ];
+    }
+
+    const result = await prisma.lead.deleteMany({ where });
+
+    res.json({ deleted: result.count });
+  } catch (err: any) {
+    console.error("Filtered delete leads error:", err.message);
+    res.status(500).json({ error: "Erro ao deletar leads filtrados" });
+  }
+});
+
+// GET /api/leads/:id
+router.get("/:id", async (req: Request, res: Response) => {
+  try {
+    const workspaceId = req.workspaceId!;
+    const id = req.params.id as string;
+
+    const lead = await prisma.lead.findFirst({
+      where: { id, workspace_id: workspaceId },
+    });
+
+    if (!lead) {
+      return res.status(404).json({ error: "Lead não encontrado" });
+    }
+
+    res.json(lead);
+  } catch (err: any) {
+    console.error("Get lead error:", err.message);
+    res.status(500).json({ error: "Erro ao buscar lead" });
+  }
+});
+
 // PATCH /api/leads/:id
 router.patch("/:id", async (req: Request, res: Response) => {
   try {
@@ -84,60 +195,26 @@ router.patch("/:id", async (req: Request, res: Response) => {
   }
 });
 
-// DELETE /api/leads/bulk
-router.delete("/bulk", async (req: Request, res: Response) => {
+// DELETE /api/leads/:id
+router.delete("/:id", async (req: Request, res: Response) => {
   try {
     const workspaceId = req.workspaceId!;
-    const { ids } = req.body;
+    const id = req.params.id as string;
 
-    if (!Array.isArray(ids) || ids.length === 0) {
-      return res.status(400).json({ error: "ids é obrigatório e deve ser um array" });
-    }
-
-    if (ids.length > 100) {
-      return res.status(400).json({ error: "Máximo de 100 leads por vez" });
-    }
-
-    const result = await prisma.lead.deleteMany({
-      where: {
-        id: { in: ids },
-        workspace_id: workspaceId,
-      },
+    const existing = await prisma.lead.findFirst({
+      where: { id, workspace_id: workspaceId },
     });
 
-    res.json({ deleted: result.count });
-  } catch (err: any) {
-    console.error("Bulk delete leads error:", err.message);
-    res.status(500).json({ error: "Erro ao deletar leads" });
-  }
-});
-
-// DELETE /api/leads/filtered?stage=&search=
-router.delete("/filtered", async (req: Request, res: Response) => {
-  try {
-    const workspaceId = req.workspaceId!;
-    const search = (req.query.search as string) || "";
-    const stage = req.query.stage as string | undefined;
-
-    const where: Prisma.LeadWhereInput = { workspace_id: workspaceId };
-
-    if (stage) {
-      where.stage = stage;
+    if (!existing) {
+      return res.status(404).json({ error: "Lead não encontrado" });
     }
 
-    if (search) {
-      where.OR = [
-        { name: { contains: search, mode: "insensitive" } },
-        { phone: { contains: search, mode: "insensitive" } },
-      ];
-    }
+    await prisma.lead.delete({ where: { id } });
 
-    const result = await prisma.lead.deleteMany({ where });
-
-    res.json({ deleted: result.count });
+    res.json({ ok: true });
   } catch (err: any) {
-    console.error("Filtered delete leads error:", err.message);
-    res.status(500).json({ error: "Erro ao deletar leads filtrados" });
+    console.error("Delete lead error:", err.message);
+    res.status(500).json({ error: "Erro ao deletar lead" });
   }
 });
 
