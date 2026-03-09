@@ -32,6 +32,34 @@ setupSocketIO(server);
 
 // Middleware global
 app.use(cors());
+
+// ── Webhook routes FIRST (with tolerant body parsing, no auth) ──
+// Evolution API sometimes sends JSON with bad escape sequences, so we parse manually
+const tolerantJsonParser: express.RequestHandler = (req, _res, next) => {
+  let raw = "";
+  req.setEncoding("utf8");
+  req.on("data", (chunk: string) => { raw += chunk; });
+  req.on("end", () => {
+    try {
+      req.body = JSON.parse(raw);
+    } catch {
+      try {
+        // Fix common issues: bad escape sequences, control chars
+        const cleaned = raw.replace(/[\x00-\x1F\x7F]/g, " ");
+        req.body = JSON.parse(cleaned);
+      } catch {
+        console.error("Webhook JSON parse failed, raw length:", raw.length);
+        req.body = {};
+      }
+    }
+    next();
+  });
+};
+app.use("/api/webhooks/evolution", tolerantJsonParser, evolutionWebhookRoutes);
+app.use("/api/webhooks/whatsapp", express.json({ limit: "10mb" }), whatsappWebhookRoutes);
+app.use("/api/webhooks/asaas", express.json({ limit: "10mb" }), asaasWebhookRoutes);
+
+// Standard JSON parser for all other routes
 app.use(express.json({ limit: "10mb" }));
 
 // Health check
@@ -54,11 +82,6 @@ app.use("/api/whatsapp", requireAuth, requireWorkspace, whatsappRoutes);
 
 // Workspace routes (auth obrigatório, workspace check dentro das rotas)
 app.use("/api/workspaces", requireAuth, workspacesRoutes);
-
-// Webhook routes (sem auth — validação interna)
-app.use("/api/webhooks/evolution", evolutionWebhookRoutes);
-app.use("/api/webhooks/whatsapp", whatsappWebhookRoutes);
-app.use("/api/webhooks/asaas", asaasWebhookRoutes);
 
 // Billing routes (auth + workspace obrigatório)
 app.use("/api/billing", requireAuth, requireWorkspace, billingRoutes);
