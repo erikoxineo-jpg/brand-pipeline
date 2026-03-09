@@ -177,7 +177,7 @@ const Dashboard = () => {
 
       const profileMap: Record<string, string> = {};
       for (const m of members || []) {
-        profileMap[m.user_id] = m.profile?.display_name || "Sem nome";
+        profileMap[m.user_id] = m.display_name || "Sem nome";
       }
 
       const opStats: Record<string, { name: string; leads: number }> = {};

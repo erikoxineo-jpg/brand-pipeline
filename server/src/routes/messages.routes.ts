@@ -33,7 +33,7 @@ router.get("/:leadId", async (req: Request, res: Response) => {
       orderBy: { created_at: "asc" },
     });
 
-    res.json({ messages });
+    res.json(messages);
   } catch (err: any) {
     console.error("List messages error:", err.message);
     res.status(500).json({ error: "Erro ao listar mensagens" });

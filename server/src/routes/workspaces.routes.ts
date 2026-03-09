@@ -79,7 +79,7 @@ router.get("/:id/members", async (req: Request, res: Response) => {
       avatar_url: m.user.profile?.avatar_url || null,
     }));
 
-    res.json({ members: result });
+    res.json(result);
   } catch (err: any) {
     console.error("List members error:", err.message);
     res.status(500).json({ error: "Erro ao listar membros" });

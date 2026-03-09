@@ -833,7 +833,7 @@ const SettingsPage = () => {
                   {members.map((member: any) => (
                     <TableRow key={member.id}>
                       <TableCell className="font-medium">
-                        {member.profile?.display_name || "Sem nome"}
+                        {member.display_name || "Sem nome"}
                       </TableCell>
                       <TableCell>
                         {editMemberId === member.id ? (

@@ -13,7 +13,7 @@ router.get("/", async (req: Request, res: Response) => {
       orderBy: { created_at: "desc" },
     });
 
-    res.json({ campaigns });
+    res.json(campaigns);
   } catch (err: any) {
     console.error("List campaigns error:", err.message);
     res.status(500).json({ error: "Erro ao listar campanhas" });

@@ -24,7 +24,7 @@ router.get("/leads", async (req: Request, res: Response) => {
       orderBy: { created_at: "desc" },
     });
 
-    res.json({ leads });
+    res.json(leads);
   } catch (err: any) {
     console.error("Pipeline leads error:", err.message);
     res.status(500).json({ error: "Erro ao listar leads do pipeline" });

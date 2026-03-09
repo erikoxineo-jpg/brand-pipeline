@@ -37,7 +37,7 @@ router.get("/", async (req: Request, res: Response) => {
       prisma.lead.count({ where }),
     ]);
 
-    res.json({ leads, count });
+    res.json({ data: leads, total: count });
   } catch (err: any) {
     console.error("List leads error:", err.message);
     res.status(500).json({ error: "Erro ao listar leads" });

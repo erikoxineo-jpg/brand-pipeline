@@ -94,31 +94,43 @@ router.get("/stats", async (req: Request, res: Response) => {
       }),
     ]);
 
-    // Formatar leadStages: [{ stage, count }]
-    const leadStages = leadStagesRaw.map((row) => ({
-      stage: row.stage,
-      count: row._count.id,
-    }));
+    // Formatar leadStages: Record<string, number> (ex: { eligible: 5, contacted: 3 })
+    const leadStages: Record<string, number> = {};
+    for (const row of leadStagesRaw) {
+      leadStages[row.stage] = row._count.id;
+    }
 
-    // Formatar dispatchStatuses: [{ status, count }]
-    const dispatchStatuses = dispatchStatusesRaw.map((row) => ({
-      status: row.status,
-      count: row._count.id,
-    }));
+    // Formatar dispatchStatuses: Record<string, number> (ex: { sent: 2, replied: 3 })
+    const dispatchStatuses: Record<string, number> = {};
+    for (const row of dispatchStatusesRaw) {
+      dispatchStatuses[row.status] = row._count.id;
+    }
+
+    // Agrupar weeklyDispatches por dia: { day, disparos, respostas }[]
+    const dayMap: Record<string, { disparos: number; respostas: number }> = {};
+    for (const d of weeklyDispatches) {
+      const day = (d.sent_at || new Date()).toISOString().slice(0, 10);
+      if (!dayMap[day]) dayMap[day] = { disparos: 0, respostas: 0 };
+      dayMap[day].disparos++;
+      if (d.status === "replied") dayMap[day].respostas++;
+    }
+    const weeklyData = Object.entries(dayMap)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([day, v]) => ({ day, ...v }));
 
     res.json({
-      stats: {
-        leadCount,
-        campaignCount,
-        dispatchCount,
-        leadStages,
-        dispatchStatuses,
-        weeklyDispatches,
+      leadCount,
+      campaignCount,
+      dispatchCount,
+      leadStages,
+      dispatchStatuses,
+      weeklyDispatches: weeklyData,
+      activeCampaigns,
+      aiStats: {
         activeCampaigns,
-        aiStats: {
-          classifiedLast24h,
-          autoRespondedLast24h,
-        },
+        sent24h: dispatchStatuses.sent || 0,
+        classified24h: classifiedLast24h,
+        autoResponded24h: autoRespondedLast24h,
       },
     });
   } catch (err: any) {

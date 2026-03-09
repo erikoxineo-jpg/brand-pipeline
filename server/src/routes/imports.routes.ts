@@ -13,7 +13,7 @@ router.get("/", async (req: Request, res: Response) => {
       orderBy: { created_at: "desc" },
     });
 
-    res.json({ imports });
+    res.json(imports);
   } catch (err: any) {
     console.error("List imports error:", err.message);
     res.status(500).json({ error: "Erro ao listar importações" });
@@ -91,8 +91,9 @@ router.post("/", async (req: Request, res: Response) => {
 
     res.status(201).json({
       importRecord: updatedImport,
-      newLeads,
+      new_leads: newLeads,
       duplicates,
+      total: leads.length,
     });
   } catch (err: any) {
     console.error("Import leads error:", err.message);

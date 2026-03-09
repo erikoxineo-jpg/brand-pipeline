@@ -41,7 +41,7 @@ router.get("/", async (req: Request, res: Response) => {
       take: 100,
     });
 
-    res.json({ dispatches });
+    res.json(dispatches);
   } catch (err: any) {
     console.error("List dispatches error:", err.message);
     res.status(500).json({ error: "Erro ao listar envios" });
@@ -65,7 +65,7 @@ router.get("/pending-reviews", async (req: Request, res: Response) => {
       orderBy: { created_at: "desc" },
     });
 
-    res.json({ dispatches });
+    res.json(dispatches);
   } catch (err: any) {
     console.error("Pending reviews error:", err.message);
     res.status(500).json({ error: "Erro ao listar revisões pendentes" });
