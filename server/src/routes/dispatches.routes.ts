@@ -1,6 +1,8 @@
 import { Router, Request, Response } from "express";
 import { prisma } from "../lib/prisma";
 import { Prisma } from "@prisma/client";
+import { sendWhatsAppMessage } from "../services/whatsapp.service";
+import { emitToWorkspace } from "../socket";
 
 const router = Router();
 
@@ -152,20 +154,96 @@ router.post("/send", async (req: Request, res: Response) => {
       return res.status(400).json({ error: "dispatch_ids é obrigatório e deve ser um array não vazio" });
     }
 
-    // Placeholder: marcar como "sent" (lógica real de WhatsApp será em whatsapp.service.ts)
-    const result = await prisma.dispatch.updateMany({
+    // Fetch dispatches with lead and campaign data
+    const dispatches = await prisma.dispatch.findMany({
       where: {
         id: { in: dispatch_ids },
         workspace_id: workspaceId,
         status: "pending",
       },
-      data: {
-        status: "sent",
-        sent_at: new Date(),
+      include: {
+        lead: { select: { id: true, name: true, phone: true, stage: true, days_inactive: true } },
+        campaign: { select: { name: true, message_template: true, followup_enabled: true, followup_messages: true } },
       },
     });
 
-    res.json({ results: { updated: result.count } });
+    // Get workspace name for template
+    const workspace = await prisma.workspace.findUnique({
+      where: { id: workspaceId },
+      select: { name: true },
+    });
+    const brandName = workspace?.name || "nossa marca";
+
+    const results: { id: string; status: string; error?: string }[] = [];
+
+    for (const dispatch of dispatches) {
+      try {
+        const lead = dispatch.lead;
+        if (!lead?.phone) {
+          results.push({ id: dispatch.id, status: "failed", error: "Lead sem telefone" });
+          continue;
+        }
+
+        // Build message from template
+        let message = dispatch.campaign?.message_template || "Olá, sentimos sua falta!";
+        message = message.replace(/\{\{nome\}\}/g, lead.name || "");
+        message = message.replace(/\{\{dias\}\}/g, String(lead.days_inactive || ""));
+        message = message.replace(/\{\{marca\}\}/g, brandName);
+
+        const result = await sendWhatsAppMessage(workspaceId, lead.phone, message, dispatch.id);
+
+        if (result.messageId) {
+          await prisma.dispatch.update({
+            where: { id: dispatch.id },
+            data: {
+              status: "sent",
+              sent_at: new Date(),
+              whatsapp_message_id: result.messageId,
+            },
+          });
+
+          // Schedule follow-up if enabled
+          const followupMessages = (dispatch.campaign?.followup_messages as any[]) || [];
+          if (dispatch.campaign?.followup_enabled && followupMessages.length > 0) {
+            const nextFollowup = followupMessages[0];
+            const delayDays = nextFollowup?.delay_days || 3;
+            await prisma.dispatch.update({
+              where: { id: dispatch.id },
+              data: {
+                next_followup_at: new Date(Date.now() + delayDays * 86400000),
+                followup_index: 0,
+              },
+            });
+          }
+
+          // Update lead stage to contacted
+          if (["ready", "imported", "eligible"].includes(lead.stage)) {
+            await prisma.lead.update({
+              where: { id: lead.id },
+              data: { stage: "contacted" },
+            });
+          }
+
+          emitToWorkspace(workspaceId, "dispatch:updated", { id: dispatch.id, status: "sent" });
+          results.push({ id: dispatch.id, status: "sent" });
+        } else {
+          await prisma.dispatch.update({
+            where: { id: dispatch.id },
+            data: { status: "failed", error_message: result.error || "Erro desconhecido" },
+          });
+          emitToWorkspace(workspaceId, "dispatch:updated", { id: dispatch.id, status: "failed" });
+          results.push({ id: dispatch.id, status: "failed", error: result.error });
+        }
+      } catch (sendErr: any) {
+        await prisma.dispatch.update({
+          where: { id: dispatch.id },
+          data: { status: "failed", error_message: sendErr.message },
+        });
+        results.push({ id: dispatch.id, status: "failed", error: sendErr.message });
+      }
+    }
+
+    res.json({ results });
   } catch (err: any) {
     console.error("Send dispatches error:", err.message);
     res.status(500).json({ error: "Erro ao enviar mensagens" });
