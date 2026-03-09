@@ -7,8 +7,9 @@ const router = Router();
 
 const OPT_OUT_KEYWORDS = ["parar", "sair", "cancelar", "remover", "stop", "unsubscribe"];
 
-// POST /api/webhooks/evolution — Evolution API webhook (no auth)
-router.post("/", async (req: Request, res: Response) => {
+// POST /api/webhooks/evolution/* — Evolution API webhook (no auth)
+// Evolution v2 with WEBHOOK_BY_EVENTS appends event name as path: /messages-upsert, /connection-update, etc.
+router.post("*", async (req: Request, res: Response) => {
   try {
     const body = req.body;
     const event = body.event;
